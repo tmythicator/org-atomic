@@ -1,0 +1,58 @@
+* TODO Strength Training
+  SCHEDULED: <2026-06-24 Wed .+1d>
+  :PROPERTIES:
+  :STYLE:    habit
+  :ATOMIC_DAYS: weekends
+  :ATOMIC_ID: Gym
+  :ATOMIC_TYPE: good
+  :ATOMIC_WHY: Aids flexibility and makes me feel better
+  :ATOMIC_OBVIOUS: Leave yoga mat out on the floor
+  :ATOMIC_EASY: 10 minutes session
+  :END:
+  - State "CANCELLED"       from "TODO"       [2026-06-20 Sat]
+  - State "DONE"       from "TODO"       [2026-06-21 Sun]
+
+* TODO Org-Atomic Coding
+  SCHEDULED: <2026-06-24 Wed .+1d>
+  :PROPERTIES:
+  :STYLE:    habit
+  :ATOMIC_DAYS: workdays
+  :ATOMIC_ID: Code
+  :ATOMIC_TYPE: good
+  :ATOMIC_WHY: Helps me think clearly and build tools
+  :ATOMIC_OBVIOUS: Place laptop on desk
+  :ATOMIC_EASY: Write one function
+  :END:
+  - State "DONE"       from "TODO"       [2026-06-23 Tue]
+  - State "DONE"       from "TODO"       [2026-06-22 Mon]
+
+* TODO Scrolling Social Media
+  SCHEDULED: <2026-06-24 Wed .+1d>
+  :PROPERTIES:
+  :STYLE:    habit
+  :ATOMIC_DAYS: workdays
+  :ATOMIC_ID: Scroll
+  :ATOMIC_TYPE: bad
+  :ATOMIC_WHY: Waste of time, not productive
+  :ATOMIC_INVISIBLE: Put phone in another room
+  :ATOMIC_HARD: Uninstall Instagram
+  :END:
+  - State "DONE"       from "TODO"       [2026-06-23 Tue]
+
+* TODO Daily Meditation
+  SCHEDULED: <2026-06-24 Wed .+1d>
+  :PROPERTIES:
+  :STYLE:    habit
+  :END:
+  - State "DONE"       from "TODO"       [2026-06-23 Tue]
+
+* TODO Hardcore Static Stretching
+  SCHEDULED: <2026-06-24 Wed .+1d>
+  :PROPERTIES:
+  :STYLE:    habit
+  :ATOMIC_DAYS: workdays
+  :ATOMIC_ID: Stretch
+  :ATOMIC_ANCHOR: Code
+  :END:
+  - State "CANCELED"     from "TODO"       [2026-06-24 Wed 17:13]
+  - State "DONE"       from "TODO"       [2026-06-23 Tue]

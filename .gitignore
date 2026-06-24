@@ -1,0 +1,20 @@
+# OS stuff
+.DS_Store
+
+# Emacs artifacts
+*~
+\#*#
+.#*
+
+# Compiled elisp
+*.elc
+
+# Backups
+*.bak
+
+# Secrets & Local environments
+.secrets.el
+.env
+.token
+.direnv
+result
