@@ -193,6 +193,7 @@
   (with-temp-buffer
     (insert-file-contents (expand-file-name "test/fixtures/mock-habits.org" (or (bound-and-true-p default-directory) ".")))
     (org-mode)
+    (org-atomic-clear-caches)
     (let ((markers nil))
       ;; Collect markers for the headers in mock-habits.org
       (goto-char (point-min))
@@ -222,21 +223,38 @@
               (item-gym (propertize "Gym" 'org-marker gym-marker))
               (item-none (propertize "None" 'org-marker meditate-marker)))
 
-          ;; Code should be first
+          ;; Code and Stretch both have effective time 1030 (Stretch inherits it from Code)
+          ;; So Code should come before Stretch (returns -1)
           (should (= (org-atomic-agenda-cmp item-code item-stretch) -1))
-          ;; Stretch should be after
+          ;; Stretch should be after Code
           (should (= (org-atomic-agenda-cmp item-stretch item-code) 1))
 
-          ;; Comparing Code (Code) and Gym (Gym)
-          ;; Alphabetically, "Code" < "Gym", so Code is first (-1)
+          ;; Code (timed: 1030) vs Gym (untimed) -> Code should be first (-1)
           (should (= (org-atomic-agenda-cmp item-code item-gym) -1))
 
-          ;; Comparing with item-none (no stack key) should place atomic habits first
+          ;; Stretch (effective time: 1030) vs Gym (untimed) -> Stretch should be first (-1)
+          (should (= (org-atomic-agenda-cmp item-stretch item-gym) -1))
+
+          ;; Comparing with item-none (no stack key, untimed) vs Code (timed) -> Code first
           (should (= (org-atomic-agenda-cmp item-code item-none) -1))
           (should (= (org-atomic-agenda-cmp item-none item-code) 1))
-          ;; Comparing two non-atomic items should return nil
-          (should (null (org-atomic-agenda-cmp item-none item-none))))))))
 
+          ;; Comparing Gym (untimed, no stack key) and None (untimed, no stack key) should return nil
+          (should (null (org-atomic-agenda-cmp item-gym item-none)))
+          (should (null (org-atomic-agenda-cmp item-none item-gym)))
+
+          ;; Test sorting by time-of-day explicitly overriding
+          (let ((item-timed-early (propertize "Early Task" 'org-marker code-marker 'time-of-day 1030))
+                (item-timed-late (propertize "Late Task" 'org-marker stretch-marker 'time-of-day 2130))
+                (item-untimed (propertize "Untimed Task" 'org-marker gym-marker)))
+            ;; Early task before late task
+            (should (= (org-atomic-agenda-cmp item-timed-early item-timed-late) -1))
+            ;; Late task after early task
+            (should (= (org-atomic-agenda-cmp item-timed-late item-timed-early) 1))
+            ;; Timed task before untimed task
+            (should (= (org-atomic-agenda-cmp item-timed-early item-untimed) -1))
+            ;; Untimed task after timed task
+            (should (= (org-atomic-agenda-cmp item-untimed item-timed-early) 1))))))))
 (ert-deftest org-atomic-test-filter-canceled-states ()
   "Test that CANCELED logbook entries are correctly ignored during sparkline rendering."
   (with-temp-buffer
@@ -321,6 +339,7 @@
   (with-temp-buffer
     (insert-file-contents (expand-file-name "test/fixtures/mock-habits.org" (or (bound-and-true-p default-directory) ".")))
     (org-mode)
+    (org-atomic-clear-caches)
     (let ((org-atomic-id-format "[%s] ")
           (org-atomic-branch-prefix " ╰─> "))
       ;; 1. Go to "Strength Training" (Gym) - single habit, good habit
@@ -336,7 +355,7 @@
         ;; Should contain the ID prefix "[Gym] "
         (should (string-match-p "\\[Gym\\]" formatted)))
 
-      ;; 2. Go to "Hardcore Static Stretching" (Stretch, anchor Code) - stacked habit
+      ;; 2. Go to "Hardcore Static Stretching" (Stretch, next after Code) - stacked habit
       (goto-char (point-min))
       (search-forward "* TODO Hardcore Static Stretching")
       (beginning-of-line)
@@ -347,7 +366,21 @@
                          nil txt)))
         ;; Should contain the hierarchy transition └── and the ID Stretch
         (should (string-match-p "└──" formatted))
-        (should (string-match-p "Stretch" formatted))))))
+        (should (string-match-p "Stretch" formatted)))
+
+      ;; 3. Go to "Scrolling Social Media" (Scroll, has time range in headline)
+      (goto-char (point-min))
+      (search-forward "* TODO Scrolling Social Media")
+      (beginning-of-line)
+      (let* ((marker (point-marker))
+             ;; Simulated result from org-agenda-format-item, which strips the time range
+             (result-formatted "  Habits:      10:00 ---------- TODO Scrolling Social Media [- 11:00]")
+             (txt (propertize "TODO Scrolling Social Media [10:00 - 11:00]" 'org-marker marker))
+             (formatted (org-atomic--org-agenda-format-item-advice
+                         (lambda (_extra _text &rest _) result-formatted)
+                         nil txt)))
+        ;; Should contain the ID prefix "[Scroll] "
+        (should (string-match-p "\\[Scroll\\]" formatted))))))
 
 (provide 'org-atomic-test)
 ;;; org-atomic-test.el ends here

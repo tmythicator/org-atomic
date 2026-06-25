@@ -53,7 +53,7 @@ than successful habit executions."
           :unsatisfying nil
           :type "good"
           :days nil
-          :anchor nil)))
+          :next nil)))
     (while args
       (let ((key (pop args))
             (val (pop args)))
@@ -113,9 +113,9 @@ than successful habit executions."
   "Get :days from HABIT plist."
   (plist-get habit :days))
 
-(defsubst org-atomic-habit-anchor (habit)
-  "Get :anchor from HABIT plist."
-  (plist-get habit :anchor))
+(defsubst org-atomic-habit-next (habit)
+  "Get :next from HABIT plist."
+  (plist-get habit :next))
 
 (defun org-atomic--get-marker-from-string (str)
   "Extract an Org marker from the text properties of STR."
@@ -208,7 +208,7 @@ Returns an `org-atomic-habit' plist if the entry is an atomic habit."
           (let* ((props (org-entry-properties (point)))
                  (id (cdr (assoc "ATOMIC_ID" props)))
                  (days-str (cdr (assoc "ATOMIC_DAYS" props)))
-                 (anchor (cdr (assoc "ATOMIC_ANCHOR" props)))
+                 (next-id (cdr (assoc "ATOMIC_NEXT" props)))
                  (type (cdr (assoc "ATOMIC_TYPE" props)))
                  (why (cdr (assoc "ATOMIC_WHY" props)))
                  (obvious (cdr (assoc "ATOMIC_OBVIOUS" props)))
@@ -223,7 +223,7 @@ Returns an `org-atomic-habit' plist if the entry is an atomic habit."
                   (cdr (assoc "ATOMIC_UNSATISFYING" props))))
             (when (or id
                       days-str
-                      anchor
+                      next-id
                       type
                       why
                       obvious
@@ -236,7 +236,7 @@ Returns an `org-atomic-habit' plist if the entry is an atomic habit."
                       unsatisfying)
               (org-atomic-habit-create
                :id id
-               :anchor anchor
+               :next next-id
                :days
                (when days-str
                  (org-atomic--parse-days days-str))
