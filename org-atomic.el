@@ -31,6 +31,7 @@
 
 (require 'cl-lib)
 (require 'org-atomic-core)
+(require 'org-atomic-util)
 (require 'subr-x)
 (require 'calendar)
 (require 'org)
@@ -91,7 +92,7 @@ ORIG-FUN is the original function, and ARGS are its arguments."
                       (org-atomic-habit-days habit-struct))
                      (modified nil))
                 ;; Keep advancing the day until it lands on an active weekday
-                (while (let* ((dow (org-atomic--day-to-dow day)))
+                (while (let* ((dow (org-atomic-util--day-to-dow day)))
                          (not (member dow active-days)))
                   (setq day (1+ day))
                   (setq modified t))
@@ -123,14 +124,14 @@ date to scan, and ARGS are additional arguments."
   (let ((rtn (apply orig-fun file date args))
         (filtered nil))
     (dolist (item rtn)
-      (let* ((marker (org-atomic--find-marker item))
+      (let* ((marker (org-atomic-util--find-marker item))
              (habit
               (when marker
                 (org-atomic--parse-habit marker)))
              (keep t))
         (when (and habit (org-atomic-habit-days habit))
           (let* ((dow
-                  (org-atomic--day-to-dow
+                  (org-atomic-util--day-to-dow
                    (calendar-day-of-week date)))
                  (active-days (org-atomic-habit-days habit)))
             (unless (member dow active-days)

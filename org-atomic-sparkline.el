@@ -27,6 +27,7 @@
 
 (require 'cl-lib)
 (require 'org-atomic-core)
+(require 'org-atomic-util)
 (require 'org-habit)
 
 (defgroup org-atomic-sparkline nil
@@ -60,33 +61,57 @@
 
 (defface org-atomic-done-face
   '((((background light))
-     (:foreground "#4caf50" :background "#eceff1"))
+     (:foreground
+      "#4caf50"
+      :background "#eceff1"
+      :inherit fixed-pitch))
     (((background dark))
-     (:foreground "#81c784" :background "#2d3748")))
+     (:foreground
+      "#81c784"
+      :background "#2d3748"
+      :inherit fixed-pitch)))
   "Face for completed habit days."
   :group 'org-atomic-sparkline)
 
 (defface org-atomic-missed-face
   '((((background light))
-     (:foreground "#c62828" :background "#eceff1"))
+     (:foreground
+      "#c62828"
+      :background "#eceff1"
+      :inherit fixed-pitch))
     (((background dark))
-     (:foreground "#e57373" :background "#2d3748")))
+     (:foreground
+      "#e57373"
+      :background "#2d3748"
+      :inherit fixed-pitch)))
   "Face for missed habit days."
   :group 'org-atomic-sparkline)
 
 (defface org-atomic-skipped-face
   '((((background light))
-     (:foreground "#b0bec5" :background "#eceff1"))
+     (:foreground
+      "#b0bec5"
+      :background "#eceff1"
+      :inherit fixed-pitch))
     (((background dark))
-     (:foreground "#718096" :background "#2d3748")))
+     (:foreground
+      "#718096"
+      :background "#2d3748"
+      :inherit fixed-pitch)))
   "Face for skipped habit days."
   :group 'org-atomic-sparkline)
 
 (defface org-atomic-border-face
   '((((background light))
-     (:foreground "#b0bec5" :background "#eceff1"))
+     (:foreground
+      "#b0bec5"
+      :background "#eceff1"
+      :inherit fixed-pitch))
     (((background dark))
-     (:foreground "#4a5568" :background "#2d3748")))
+     (:foreground
+      "#4a5568"
+      :background "#2d3748"
+      :inherit fixed-pitch)))
   "Face for sparkline boundary symbols."
   :group 'org-atomic-sparkline)
 
@@ -129,7 +154,7 @@ Each element in HISTORY should be one of `good-done', `good-missed',
   "Parse LOGBOOK of entry at MARKER or point.
 Return active done dates as day numbers, excluding transitions to CANCELED,
 CANCELLED or other non-DONE states."
-  (let ((resolved-marker (org-atomic--find-marker marker)))
+  (let ((resolved-marker (org-atomic-util--find-marker marker)))
     (when (and resolved-marker (marker-buffer resolved-marker))
       (with-current-buffer (marker-buffer resolved-marker)
         (save-excursion
@@ -161,16 +186,16 @@ CANCELLED or other non-DONE states."
   "Build an atomic sparkline for HABIT from STARTING to ENDING.
 CURRENT is the effective today time.
 If PARSED is a non-nil habit plist, use it; otherwise parse the habit."
-  (let* ((resolved-marker (org-atomic--find-marker))
+  (let* ((resolved-marker (org-atomic-util--find-marker))
          (habit-struct
           (or parsed (org-atomic--parse-habit resolved-marker)))
          (done-dates
           (or (org-atomic--get-non-canceled-done-dates
                resolved-marker)
               (org-habit-done-dates habit)))
-         (start-day (org-atomic--time-to-day-number starting))
-         (now-day (org-atomic--time-to-day-number current))
-         (end-day (org-atomic--time-to-day-number ending))
+         (start-day (org-atomic-util--time-to-day-number starting))
+         (now-day (org-atomic-util--time-to-day-number current))
+         (end-day (org-atomic-util--time-to-day-number ending))
          (target-len (1+ (- end-day start-day)))
          (body-len (- target-len 2))
          (active-days
@@ -190,7 +215,7 @@ If PARSED is a non-nil habit plist, use it; otherwise parse the habit."
            (d loop-start))
       (while (< d (+ loop-start body-len))
         (let* ((done-p (member d done-dates))
-               (weekday (org-atomic--day-to-dow d))
+               (weekday (org-atomic-util--day-to-dow d))
                (is-active-day
                 (or (null active-days) (member weekday active-days))))
           (cond

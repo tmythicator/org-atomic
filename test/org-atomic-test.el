@@ -24,16 +24,16 @@
   "Test parsing of ATOMIC_DAYS values."
   (let ((org-atomic-day-groups '(("workdays" 1 2 3 4 5)
                                  ("weekends" 6 7))))
-    (should (equal (org-atomic--parse-days "workdays") '(1 2 3 4 5)))
-    (should (equal (org-atomic--parse-days "weekends") '(6 7)))
-    (should (equal (org-atomic--parse-days "1, 2, 3") '(1 2 3)))
-    (should (equal (org-atomic--parse-days "1 2 3") '(1 2 3)))
-    (should (equal (org-atomic--parse-days "mon tue wed") '(1 2 3)))
-    (should (equal (org-atomic--parse-days "mon,tue") '(1 2)))
-    (should (equal (org-atomic--parse-days "Sunday Monday") '(7 1)))
-    (should (null (org-atomic--parse-days nil)))
-    (should (null (org-atomic--parse-days "")))
-    (should (null (org-atomic--parse-days "invalid-group")))))
+    (should (equal (org-atomic-util--parse-days "workdays") '(1 2 3 4 5)))
+    (should (equal (org-atomic-util--parse-days "weekends") '(6 7)))
+    (should (equal (org-atomic-util--parse-days "1, 2, 3") '(1 2 3)))
+    (should (equal (org-atomic-util--parse-days "1 2 3") '(1 2 3)))
+    (should (equal (org-atomic-util--parse-days "mon tue wed") '(1 2 3)))
+    (should (equal (org-atomic-util--parse-days "mon,tue") '(1 2)))
+    (should (equal (org-atomic-util--parse-days "Sunday Monday") '(7 1)))
+    (should (null (org-atomic-util--parse-days nil)))
+    (should (null (org-atomic-util--parse-days "")))
+    (should (null (org-atomic-util--parse-days "invalid-group")))))
 
 (ert-deftest org-atomic-test-draw-sparkline ()
   "Test drawing of sparklines."
@@ -362,11 +362,10 @@
       (let* ((marker (point-marker))
              (txt (propertize "TODO Hardcore Static Stretching" 'org-marker marker))
              (formatted (org-atomic--org-agenda-format-item-advice
-                         (lambda (_extra text &rest _) text)
-                         nil txt)))
-        ;; Should contain the hierarchy transition └── and the ID Stretch
-        (should (string-match-p "└──" formatted))
-        (should (string-match-p "Stretch" formatted)))
+                          (lambda (_extra text &rest _) text)
+                          nil txt)))
+        ;; Should contain the hook ╰─> before TODO, and the ID Stretch after TODO
+        (should (string-match "╰─> *TODO *\\[Stretch\\]" formatted)))
 
       ;; 3. Go to "Scrolling Social Media" (Scroll, has time range in headline)
       (goto-char (point-min))
@@ -377,10 +376,12 @@
              (result-formatted "  Habits:      10:00 ---------- TODO Scrolling Social Media [- 11:00]")
              (txt (propertize "TODO Scrolling Social Media [10:00 - 11:00]" 'org-marker marker))
              (formatted (org-atomic--org-agenda-format-item-advice
-                         (lambda (_extra _text &rest _) result-formatted)
-                         nil txt)))
-        ;; Should contain the ID prefix "[Scroll] "
-        (should (string-match-p "\\[Scroll\\]" formatted))))))
+                          (lambda (_extra _text &rest _) result-formatted)
+                          nil txt)))
+        ;; Should contain the ID prefix "[Scroll] " after "TODO"
+        (should (string-match "TODO *\\[Scroll\\]" formatted))
+        ;; Redundant time range remnant should be completely removed
+        (should-not (string-match-p "- 11:00" formatted))))))
 
 (provide 'org-atomic-test)
 ;;; org-atomic-test.el ends here
