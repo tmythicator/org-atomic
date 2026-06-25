@@ -111,13 +111,13 @@ Each element in HISTORY should be one of `good-done', `good-missed',
                            'face 'org-atomic-done-face))
               (good-missed
                (propertize (string org-atomic-missed-char)
-                           'face 'org-atomic-done-face))
+                           'face 'org-atomic-missed-face))
               (bad-done
                (propertize (string org-atomic-done-char)
                            'face 'org-atomic-missed-face))
               (bad-avoided
                (propertize (string org-atomic-missed-char)
-                           'face 'org-atomic-missed-face))
+                           'face 'org-atomic-done-face))
               (skipped
                (propertize (string org-atomic-skipped-char)
                            'face 'org-atomic-skipped-face))
