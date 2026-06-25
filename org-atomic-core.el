@@ -17,6 +17,7 @@
 (require 'subr-x)
 (require 'calendar)
 (require 'org)
+(require 'org-atomic-util)
 
 (defgroup org-atomic nil
   "Options concerning atomic habit tracking in Org-mode."
@@ -53,18 +54,14 @@ than successful habit executions."
           :unsatisfying nil
           :type "good"
           :days nil
-          :anchor nil)))
+          :next nil)))
     (while args
       (let ((key (pop args))
             (val (pop args)))
         (plist-put defaults key val)))
     defaults))
 
-(defun org-atomic-habit-p (habit)
-  "Return non-nil if HABIT is a valid atomic habit plist."
-  (and (listp habit) (plist-member habit :id) (plist-get habit :id)))
-
-;; Inline accessors to avoid cl-defstruct requirement warnings
+;; Plist accessors
 (defsubst org-atomic-habit-id (habit)
   "Get :id from HABIT plist."
   (plist-get habit :id))
@@ -113,94 +110,11 @@ than successful habit executions."
   "Get :days from HABIT plist."
   (plist-get habit :days))
 
-(defsubst org-atomic-habit-anchor (habit)
-  "Get :anchor from HABIT plist."
-  (plist-get habit :anchor))
-
-(defun org-atomic--get-marker-from-string (str)
-  "Extract an Org marker from the text properties of STR."
-  (when (stringp str)
-    (let ((pos
-           (or (text-property-not-all 0 (length str) 'org-marker nil
-                                      str)
-               (text-property-not-all
-                0 (length str) 'org-hd-marker nil
-                str))))
-      (when pos
-        (or (get-text-property pos 'org-marker str)
-            (get-text-property pos 'org-hd-marker str))))))
-
-(defun org-atomic--get-marker-from-context ()
-  "Extract an Org marker from the current buffer context.
-Checks text properties at point, then on the current line, and finally
-falls back to `point-marker' if at an Org heading."
-  (or (get-text-property (point) 'org-marker)
-      (get-text-property (point) 'org-hd-marker)
-      (let ((pos
-             (or (text-property-not-all
-                  (line-beginning-position)
-                  (line-end-position)
-                  'org-marker
-                  nil)
-                 (text-property-not-all
-                  (line-beginning-position)
-                  (line-end-position)
-                  'org-hd-marker
-                  nil))))
-        (if pos
-            (or (get-text-property pos 'org-marker)
-                (get-text-property pos 'org-hd-marker))
-          (when (and (derived-mode-p 'org-mode) (org-at-heading-p))
-            (point-marker))))))
-
-(defun org-atomic--find-marker (&optional obj)
-  "Find an Org marker from OBJ (string, marker, or nil).
-If OBJ is nil, or if it is a string without marker properties, search the
-current point, current line, or fallback to `point-marker' if at an Org
-heading."
-  (cond
-   ((markerp obj)
-    obj)
-   ((stringp obj)
-    (or (org-atomic--get-marker-from-string obj)
-        (org-atomic--get-marker-from-context)))
-   (t
-    (org-atomic--get-marker-from-context))))
-
-(defun org-atomic--parse-days (days-str)
-  "Parse DAYS-STR into a list of day integers (1=Monday, 7=Sunday).
-Accepts custom day group names from `org-atomic-day-groups',
-comma/space separated day numbers, or names (e.g. \"mon,tue\" or \"Monday\")."
-  (when (and days-str (not (string-empty-p (string-trim days-str))))
-    (let* ((clean-str (downcase (string-trim days-str)))
-           (group-match
-            (cdr (assoc clean-str org-atomic-day-groups))))
-      (if group-match
-          group-match
-        (let ((tokens (split-string clean-str "[, ]+" t)))
-          (thread-last
-           (mapcar
-            (lambda (tok)
-              (cond
-               ;; Direct integer
-               ((string-match-p "^[1-7]$" tok)
-                (string-to-number tok))
-               ;; Day name abbreviations / full names (Mon -> 1, Sun -> 7)
-               (t
-                (let ((day-idx
-                       (cl-position
-                        (substring tok 0 (min 3 (length tok)))
-                        '("mon" "tue" "wed" "thu" "fri" "sat" "sun")
-                        :test #'string=)))
-                  (when day-idx
-                    (1+ day-idx))))))
-            tokens)
-           (delq nil)))))))
-
 (defun org-atomic--parse-habit (&optional marker txt)
   "Parse all ATOMIC_* properties at MARKER or in TXT.
 Returns an `org-atomic-habit' plist if the entry is an atomic habit."
-  (let ((resolved-marker (org-atomic--find-marker (or marker txt))))
+  (let ((resolved-marker
+         (org-atomic-util--find-marker (or marker txt))))
     (when (and resolved-marker (marker-buffer resolved-marker))
       (with-current-buffer (marker-buffer resolved-marker)
         (save-excursion
@@ -208,7 +122,7 @@ Returns an `org-atomic-habit' plist if the entry is an atomic habit."
           (let* ((props (org-entry-properties (point)))
                  (id (cdr (assoc "ATOMIC_ID" props)))
                  (days-str (cdr (assoc "ATOMIC_DAYS" props)))
-                 (anchor (cdr (assoc "ATOMIC_ANCHOR" props)))
+                 (next-id (cdr (assoc "ATOMIC_NEXT" props)))
                  (type (cdr (assoc "ATOMIC_TYPE" props)))
                  (why (cdr (assoc "ATOMIC_WHY" props)))
                  (obvious (cdr (assoc "ATOMIC_OBVIOUS" props)))
@@ -223,7 +137,7 @@ Returns an `org-atomic-habit' plist if the entry is an atomic habit."
                   (cdr (assoc "ATOMIC_UNSATISFYING" props))))
             (when (or id
                       days-str
-                      anchor
+                      next-id
                       type
                       why
                       obvious
@@ -236,10 +150,10 @@ Returns an `org-atomic-habit' plist if the entry is an atomic habit."
                       unsatisfying)
               (org-atomic-habit-create
                :id id
-               :anchor anchor
+               :next next-id
                :days
                (when days-str
-                 (org-atomic--parse-days days-str))
+                 (org-atomic-util--parse-days days-str))
                :type (or type "good")
                :why why
                :obvious obvious
@@ -251,22 +165,137 @@ Returns an `org-atomic-habit' plist if the entry is an atomic habit."
                :satisfying satisfying
                :unsatisfying unsatisfying))))))))
 
-(defun org-atomic--time-to-day-number (time)
-  "Convert TIME to an absolute day number.
-TIME can be an absolute day number (integer) or a Lisp time value."
-  (if (and (integerp time) (< time 10000000))
-      time
-    (time-to-days time)))
+;;; Caches
 
-(defun org-atomic--day-to-dow (day-or-cal-dow)
-  "Convert DAY-OR-CAL-DOW to standard weekday index (1=Monday, 7=Sunday)."
-  (let ((d
-         (if (>= day-or-cal-dow 7)
-             (mod day-or-cal-dow 7)
-           day-or-cal-dow)))
-    (if (= d 0)
-        7
-      d)))
+(defvar org-atomic--find-id-cache (make-hash-table :test 'equal)
+  "Cache for `org-atomic--find-habit-by-id`.")
+
+(defvar org-atomic--find-next-cache (make-hash-table :test 'equal)
+  "Cache for `org-atomic--find-predecessor-by-next-id`.")
+
+(defvar org-atomic--time-cache (make-hash-table :test 'equal)
+  "Cache for `org-atomic--get-time-at-marker`.")
+
+(defun org-atomic-clear-caches ()
+  "Clear all org-atomic caches."
+  (interactive)
+  (clrhash org-atomic--find-id-cache)
+  (clrhash org-atomic--find-next-cache)
+  (clrhash org-atomic--time-cache))
+
+;;; Heading Search & Hierarchy Utilities
+
+(defun org-atomic--find-heading-by-property
+    (property value &optional cache)
+  "Find the marker of the heading where PROPERTY equals VALUE.
+Uses CACHE (a hash table) if provided."
+  (if (and cache
+           (let ((cached (gethash value cache 'not-found)))
+             (not (eq cached 'not-found))))
+      (gethash value cache)
+    (let ((found-pos nil)
+          (buffers
+           (cons
+            (current-buffer)
+            (delq
+             (current-buffer)
+             (delq
+              nil
+              (mapcar #'find-buffer-visiting org-agenda-files))))))
+      (setq found-pos
+            (cl-some
+             (lambda (buf)
+               (when (buffer-live-p buf)
+                 (with-current-buffer buf
+                   (save-excursion
+                     (save-restriction
+                       (widen)
+                       (goto-char (point-min))
+                       (while (and (not found-pos)
+                                   (re-search-forward "^\\*+ " nil t))
+                         (let ((val (org-entry-get (point) property)))
+                           (if (and val
+                                    (string= (string-trim val) value))
+                               (setq found-pos (point-marker))
+                             (forward-line 1))))
+                       found-pos)))))
+             buffers))
+      (when cache
+        (puthash value found-pos cache))
+      found-pos)))
+
+(defun org-atomic--find-habit-by-id (id)
+  "Find the marker of the habit with ATOMIC_ID equal to ID."
+  (org-atomic--find-heading-by-property "ATOMIC_ID" id
+                                        org-atomic--find-id-cache))
+
+(defun org-atomic--find-predecessor-by-next-id (id)
+  "Find the marker of the habit that has ATOMIC_NEXT equal to ID."
+  (org-atomic--find-heading-by-property "ATOMIC_NEXT" id
+                                        org-atomic--find-next-cache))
+
+(defun org-atomic--get-time-at-marker (marker)
+  "Get the time of day (integer HHMM) for the habit at MARKER."
+  (when (and marker (marker-buffer marker))
+    (let* ((cache-key
+            (format "%s:%d"
+                    (buffer-name (marker-buffer marker))
+                    (marker-position marker)))
+           (cached
+            (gethash cache-key org-atomic--time-cache 'not-found)))
+      (if (not (eq cached 'not-found))
+          cached
+        (let ((time-val
+               (with-current-buffer (marker-buffer marker)
+                 (save-excursion
+                   (goto-char marker)
+                   (let ((headline (org-get-heading t t t t))
+                         (scheduled
+                          (org-entry-get (point) "SCHEDULED")))
+                     (or (org-atomic-util--parse-time-str-to-int
+                          headline)
+                         (org-atomic-util--parse-time-str-to-int
+                          scheduled)))))))
+          (puthash cache-key time-val org-atomic--time-cache)
+          time-val)))))
+
+(defun org-atomic--get-effective-time (item key marker)
+  "Get the effective time of day for ITEM at MARKER with stack KEY."
+  (or (get-text-property 0 'time-of-day item)
+      (when marker
+        (or (org-atomic--get-time-at-marker marker)
+            (when key
+              (let* ((parts (split-string key "/"))
+                     (root-id (car parts))
+                     (root-marker
+                      (org-atomic--find-habit-by-id root-id)))
+                (when root-marker
+                  (org-atomic--get-time-at-marker root-marker))))))))
+
+(defun org-atomic--get-stack-key (marker &optional visited)
+  "Get the hierarchical stack key for the habit at MARKER.
+VISITED is a list of already visited IDs to prevent infinite loops."
+  (when (and marker (marker-buffer marker))
+    (with-current-buffer (marker-buffer marker)
+      (save-excursion
+        (goto-char marker)
+        (let ((id (org-entry-get (point) "ATOMIC_ID")))
+          (when id
+            (let* ((id-trimmed (string-trim id))
+                   (pred-marker
+                    (unless (member id-trimmed visited)
+                      (org-atomic--find-predecessor-by-next-id
+                       id-trimmed))))
+              (cond
+               ;; Base case: no predecessor or cycle
+               ((or (null pred-marker) (member id-trimmed visited))
+                id-trimmed)
+               ;; Recursive case: resolve parent stack key
+               (t
+                (concat
+                 (org-atomic--get-stack-key pred-marker
+                                            (cons id-trimmed visited))
+                 "/" id-trimmed))))))))))
 
 (provide 'org-atomic-core)
 ;;; org-atomic-core.el ends here

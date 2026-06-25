@@ -30,6 +30,7 @@
 (require 'subr-x)
 (require 'org)
 (require 'org-agenda)
+(require 'org-atomic-util)
 
 (defgroup org-atomic-agenda nil
   "Customization group for org-atomic agenda formatting."
@@ -40,21 +41,32 @@
   :type 'string
   :group 'org-atomic-agenda)
 
+(defcustom org-atomic-branch-prefix " └── "
+  "Prefix used for stacked branch indentation in the Org Agenda."
+  :type 'string
+  :group 'org-atomic-agenda)
+
 (defface org-atomic-id-face
-  '((((background light)) (:foreground "#0d9488" :weight bold))
-    (((background dark)) (:foreground "#2dd4bf" :weight bold)))
+  '((((background light))
+     (:foreground "#0d9488" :weight bold :inherit fixed-pitch))
+    (((background dark))
+     (:foreground "#2dd4bf" :weight bold :inherit fixed-pitch)))
   "Face for prepended habit ID tags in the Org Agenda."
   :group 'org-atomic-agenda)
 
 (defface org-atomic-bad-habit-face
-  '((((background light)) (:foreground "#e11d48" :weight bold))
-    (((background dark)) (:foreground "#fb7185" :weight bold)))
+  '((((background light))
+     (:foreground "#e11d48" :weight bold :inherit fixed-pitch))
+    (((background dark))
+     (:foreground "#fb7185" :weight bold :inherit fixed-pitch)))
   "Face for prepended bad habit ID tags in the Org Agenda."
   :group 'org-atomic-agenda)
 
 (defface org-atomic-branch-face
-  '((((background light)) (:foreground "#b0bec5"))
-    (((background dark)) (:foreground "#718096")))
+  '((((background light))
+     (:foreground "#b0bec5" :inherit fixed-pitch))
+    (((background dark))
+     (:foreground "#718096" :inherit fixed-pitch)))
   "Face for tree branch indentation in the Org Agenda."
   :group 'org-atomic-agenda)
 
@@ -110,91 +122,29 @@
         (when (> (length lines) 1)
           (string-join lines "\n"))))))
 
-(defun org-atomic--find-habit-by-id (id)
-  "Find the marker or position of the habit with ATOMIC_ID equal to ID."
-  (let ((found-pos nil)
-        (buffers
-         (cons
-          (current-buffer)
-          (delq
-           (current-buffer)
-           (delq
-            nil (mapcar #'find-buffer-visiting org-agenda-files))))))
-    (cl-some
-     (lambda (buf)
-       (when (buffer-live-p buf)
-         (with-current-buffer buf
-           (save-excursion
-             (save-restriction
-               (widen)
-               (goto-char (point-min))
-               (while (and (not found-pos)
-                           (re-search-forward "^\\*+ " nil t))
-                 (let ((val (org-entry-get (point) "ATOMIC_ID")))
-                   (if (and val (string= (string-trim val) id))
-                       (setq found-pos (point-marker))
-                     (forward-line 1))))
-               found-pos)))))
-     buffers)))
-
-(defun org-atomic--get-stack-key (marker &optional visited)
-  "Get the hierarchical stack key for the habit at MARKER.
-VISITED is a list of already visited IDs to prevent infinite loops."
-  (when (and marker (marker-buffer marker))
-    (with-current-buffer (marker-buffer marker)
-      (save-excursion
-        (goto-char marker)
-        (let ((id (org-entry-get (point) "ATOMIC_ID"))
-              (anchor (org-entry-get (point) "ATOMIC_ANCHOR")))
-          (when id
-            (let ((id-trimmed (string-trim id)))
-              (cond
-               ;; Base case: no anchor or cycle
-               ((or (null anchor) (member id-trimmed visited))
-                id-trimmed)
-               ;; Recursive case: resolve parent stack key
-               (t
-                (let ((parent-marker
-                       (org-atomic--find-habit-by-id
-                        (string-trim anchor))))
-                  (if parent-marker
-                      (concat
-                       (org-atomic--get-stack-key parent-marker
-                                                  (cons
-                                                   id-trimmed
-                                                   visited))
-                       "/" id-trimmed)
-                    ;; Parent not found, fallback to anchor name / ID
-                    (concat
-                     (string-trim anchor) "/" id-trimmed))))))))))))
-
-
 (defun org-atomic-agenda-cmp (a b)
   "Custom comparator for sorting atomic habits in the agenda.
-Compares agenda entries A and B by their hierarchical stack keys."
-  (let* ((marker-a (org-atomic--find-marker a))
-         (marker-b (org-atomic--find-marker b))
+Compares agenda entries A and B by time, then stacks them together."
+  (let* ((marker-a (org-atomic-util--find-marker a))
+         (marker-b (org-atomic-util--find-marker b))
          (key-a
           (when marker-a
             (org-atomic--get-stack-key marker-a)))
          (key-b
           (when marker-b
-            (org-atomic--get-stack-key marker-b))))
-    (cond
-     ((and key-a key-b)
-      (cond
-       ((string-lessp key-a key-b)
-        -1)
-       ((string-lessp key-b key-a)
-        1)
-       (t
-        nil)))
-     (key-a
-      -1)
-     (key-b
-      1)
-     (t
-      nil))))
+            (org-atomic--get-stack-key marker-b)))
+         (time-a (org-atomic--get-effective-time a key-a marker-a))
+         (time-b (org-atomic--get-effective-time b key-b marker-b)))
+    (or (org-atomic-util--cmp-number-with-nil time-a time-b)
+        (when (and key-a key-b)
+          (let ((root-a (car (split-string key-a "/")))
+                (root-b (car (split-string key-b "/"))))
+            (when (string= root-a root-b)
+              (cond
+               ((string-lessp key-a key-b)
+                -1)
+               ((string-lessp key-b key-a)
+                1))))))))
 
 (defvar org-atomic--saved-sorting-strategy nil
   "Saved value of `org-agenda-sorting-strategy`.")
@@ -233,7 +183,8 @@ Compares agenda entries A and B by their hierarchical stack keys."
 
 
 (defun org-atomic--build-prefix-str (stack-key type)
-  "Build the propertized ID prefix and hierarchy branch for STACK-KEY and TYPE."
+  "Build the propertized ID prefix and hierarchy branch for STACK-KEY and TYPE.
+Returns a cons cell (INDENT-STR . LABEL-STR)."
   (let* ((parts (split-string stack-key "/"))
          (len (length parts))
          (label (car (last parts)))
@@ -246,55 +197,63 @@ Compares agenda entries A and B by their hierarchical stack keys."
                       'face
                       face
                       'font-lock-face
-                      face)))
-    (if (> len 1)
-        (let ((indent
-               (concat (make-string (* 4 (- len 2)) ?\s) " └── ")))
-          (concat
-           (propertize indent
-                       'face
-                       'org-atomic-branch-face
-                       'font-lock-face
-                       'org-atomic-branch-face)
-           label-str))
-      label-str)))
+                      face))
+         (indent-str
+          (if (> len 1)
+              (propertize (concat
+                           (make-string (* 4 (- len 2)) ?\s)
+                           org-atomic-branch-prefix)
+                          'face
+                          'org-atomic-branch-face
+                          'font-lock-face
+                          'org-atomic-branch-face)
+            "")))
+    (cons indent-str label-str)))
 
-(defun org-atomic--splice-prefix (result txt prefix-str)
-  "Splice PREFIX-STR into the formatted agenda RESULT string based on TXT."
+(defun org-atomic--splice-prefix (result txt indent-str id-str)
+  "Splice INDENT-STR and ID-STR into the formatted agenda RESULT string based on TXT."
   (let* ((keywords
           (if (boundp 'org-todo-keywords-1)
               org-todo-keywords-1
             '("TODO" "DONE")))
          (todo-regexp
           (concat "^\\(" (regexp-opt keywords) "\\)\\( +\\)"))
+         (todo-regexp-no-anchor
+          (concat "\\<\\(" (regexp-opt keywords) "\\)\\>\\( +\\)"))
          (has-todo (string-match todo-regexp txt))
          (body-part
           (if has-todo
               (substring txt (match-end 0))
             txt))
          (body-clean
-          (org-trim
-           (replace-regexp-in-string
-            " +:[a-zA-Z0-9_@:]+:$" "" body-part))))
-    (if (and (not (string-empty-p body-clean))
-             (string-match (regexp-quote body-clean) result))
+          (org-atomic-util--clean-headline-text body-part)))
+    (cond
+     ((string-match todo-regexp-no-anchor result)
+      (let ((todo-start (match-beginning 1))
+            (todo-end (match-end 2)))
         (concat
-         (substring result 0 (match-beginning 0))
-         prefix-str
-         (substring result (match-beginning 0)))
-      (if (and has-todo (string-match todo-regexp result))
-          (concat
-           (substring result 0 (match-end 0))
-           prefix-str
-           (substring result (match-end 0)))
-        result))))
+         (substring result 0 todo-start)
+         (or indent-str "")
+         (substring result todo-start todo-end)
+         (or id-str "")
+         (substring result todo-end))))
+     ((and (not (string-empty-p body-clean))
+           (string-match (regexp-quote body-clean) result))
+      (let ((body-start (match-beginning 0)))
+        (concat
+         (substring result 0 body-start)
+         (or indent-str "")
+         (or id-str "")
+         (substring result body-start))))
+     (t
+      (concat result (or indent-str "") (or id-str ""))))))
 
 (defun org-atomic--org-agenda-format-item-advice
     (orig-fun extra txt &rest args)
   "Advice to intercept `org-agenda-format-item' and prepend ID.
 ORIG-FUN is the original function.  EXTRA, TXT, and ARGS are the standard
 arguments."
-  (let* ((marker (org-atomic--find-marker txt))
+  (let* ((marker (org-atomic-util--find-marker txt))
          (habit
           (when marker
             (org-atomic--parse-habit marker)))
@@ -311,12 +270,20 @@ arguments."
                   (org-atomic-habit-type habit)
                 "good"))
              (formatted
-              (if has-stack
-                  (org-atomic--splice-prefix
-                   result
-                   txt
-                   (org-atomic--build-prefix-str stack-key type))
-                result))
+              (let ((cleaned
+                     (if habit
+                         (org-atomic-util--clean-result-time result)
+                       result)))
+                (if has-stack
+                    (let ((prefix-pair
+                           (org-atomic--build-prefix-str
+                            stack-key type)))
+                      (org-atomic--splice-prefix
+                       cleaned
+                       txt
+                       (car prefix-pair)
+                       (cdr prefix-pair)))
+                  cleaned)))
              (tooltip
               (when habit
                 (org-atomic--build-tooltip nil habit))))
@@ -332,6 +299,7 @@ arguments."
 (defun org-atomic-agenda-finalize-faces ()
   "Restore org-atomic faces in the agenda buffer.
 This runs after `org-agenda' has finished styling the entries."
+  (org-atomic-clear-caches)
   (save-excursion
     (save-restriction
       (widen)
