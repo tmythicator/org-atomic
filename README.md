@@ -1,6 +1,6 @@
 # org-atomic
 
-`org-atomic` is a habit tracker for Emacs Org-mode. It replaces default asterisk-based `org-habit` graphs with clean Unicode blocks, and adds day groups, habit stacking, and tooltips inspired by the book *Atomic Habits* by James Clear.
+`org-atomic` is a habit tracker for Emacs Org-mode. It replaces default asterisk-based `org-habit` graphs with clean Unicode blocks, and adds day groups, habit stacking, and tooltips inspired by the book _Atomic Habits_ by James Clear.
 
 ## Features
 
@@ -10,7 +10,7 @@
    - `·` (Skipped / rest day)
 2. **Flexible Day Groups**: Define active days (e.g., `workdays`, `weekends`, or specific weekdays). Rest days are represented as skipped (`·`) and do not break streaks.
 3. **Agenda Prefixes**: Prepends a styled habit ID prefix (e.g. `[ Gym ] Strength Training`) in the Org Agenda.
-4. **Habit Stacking**: Anchor habits to other habits to form sequential dependencies in the agenda view.
+4. **Habit Stacking**: Chain habits sequentially to form dependencies in the agenda view.
 5. **Contextual Tooltips**: Displays prompts and cues on hover (e.g., motivation, ease triggers).
 
 ---
@@ -48,13 +48,14 @@ Add `:STYLE: habit` to your Org entry and use the following properties:
 - `ATOMIC_ID`: A unique ID for the habit (e.g. `Gym`). This ID is also shown as a prefix in your agenda.
 - `ATOMIC_TYPE`: Set to `good` (default) or `bad` (for habits you want to avoid).
 - `ATOMIC_DAYS`: Active days. Can be a group (`workdays`, `weekends`, `daily`), day numbers (`1-7` where 1 is Monday), or day names (`mon,tue`). If omitted, or set to an unrecognized name, the habit defaults to **daily** (active every day).
-- `ATOMIC_ANCHOR`: The ID of another habit to stack under (e.g. `Code`).
+- `ATOMIC_NEXT`: The ID of the next habit in the stack sequence (e.g., if habit A has `:ATOMIC_NEXT: B`, habit B will stack underneath habit A).
 
 ### How org-atomic handles rest days and missed habits
 
 In standard Org-mode, if you miss a scheduled task, it becomes "overdue" and will nag you in your agenda every single day until you mark it done. This doesn't work well for habits because rest days should be guilt-free.
 
 To solve this, `org-atomic` does some smart behind-the-scenes filtering:
+
 - **No guilt on rest days**: If you miss a habit on an active day (e.g., Saturday), it won't clutter your agenda on rest days (e.g., Monday).
 - **Auto-resurfacing**: The missed habit will quietly wait and only show up again on your next active day (e.g., the following Saturday).
 - **Clean future schedule**: Future instances of habits will only appear on their active days in your weekly or monthly agenda views, keeping your schedule clean.
@@ -70,17 +71,28 @@ To solve this, `org-atomic` does some smart behind-the-scenes filtering:
 ### Example
 
 ```org
-* TODO Strength Training
+* TODO Strength Training [07:30 - 08:30]
   SCHEDULED: <2026-06-24 Wed .+1d>
   :PROPERTIES:
   :STYLE:             habit
   :ATOMIC_DAYS:       weekends
   :ATOMIC_ID:         Gym
+  :ATOMIC_NEXT:       Shower
   :ATOMIC_WHY:        Aids flexibility
   :ATOMIC_OBVIOUS:    Leave yoga mat out on the floor
   :ATOMIC_EASY:       10 minute session
   :END:
   - State "DONE"       from "TODO"       [2026-06-21 Sun]
+
+* TODO Cold Shower
+  SCHEDULED: <2026-06-24 Wed .+1d>
+  :PROPERTIES:
+  :STYLE:             habit
+  :ATOMIC_DAYS:       weekends
+  :ATOMIC_ID:         Shower
+  :ATOMIC_WHY:        Boosts recovery
+  :ATOMIC_EASY:       Just 2 minutes
+  :END:
 ```
 
 ---
@@ -120,4 +132,4 @@ Faces available for customization:
 
 ## References & Inspiration
 
-- [*Atomic Habits* by James Clear](https://jamesclear.com/atomic-habits) — The core concepts of habit identity, stacking, and the four laws of behavior change are inspired by and taken directly from this book.
+- [_Atomic Habits_ by James Clear](https://jamesclear.com/atomic-habits) — The core concepts of habit identity, stacking, and the four laws of behavior change are inspired by and taken directly from this book.
