@@ -47,8 +47,17 @@ Add `:STYLE: habit` to your Org entry and use the following properties:
 
 - `ATOMIC_ID`: A unique ID for the habit (e.g. `Gym`). This ID is also shown as a prefix in your agenda.
 - `ATOMIC_TYPE`: Set to `good` (default) or `bad` (for habits you want to avoid).
-- `ATOMIC_DAYS`: Active days. Can be a group (`workdays`, `weekends`), day numbers (`1-7` where 1 is Monday), or day names (`mon,tue`).
+- `ATOMIC_DAYS`: Active days. Can be a group (`workdays`, `weekends`, `daily`), day numbers (`1-7` where 1 is Monday), or day names (`mon,tue`). If omitted, or set to an unrecognized name, the habit defaults to **daily** (active every day).
 - `ATOMIC_ANCHOR`: The ID of another habit to stack under (e.g. `Code`).
+
+### How org-atomic handles rest days and missed habits
+
+In standard Org-mode, if you miss a scheduled task, it becomes "overdue" and will nag you in your agenda every single day until you mark it done. This doesn't work well for habits because rest days should be guilt-free.
+
+To solve this, `org-atomic` does some smart behind-the-scenes filtering:
+- **No guilt on rest days**: If you miss a habit on an active day (e.g., Saturday), it won't clutter your agenda on rest days (e.g., Monday).
+- **Auto-resurfacing**: The missed habit will quietly wait and only show up again on your next active day (e.g., the following Saturday).
+- **Clean future schedule**: Future instances of habits will only appear on their active days in your weekly or monthly agenda views, keeping your schedule clean.
 
 ### Tooltip Prompts (Atomic Habit Laws)
 
@@ -85,6 +94,7 @@ You can change the characters and default day groups:
 (setq org-atomic-day-groups
       '(("workdays" 1 2 3 4 5)
         ("weekends" 6 7)
+        ("daily" 1 2 3 4 5 6 7)
         ("gym-days" 1 3 5)))
 
 ;; Custom characters
@@ -105,3 +115,9 @@ Faces available for customization:
 - `org-atomic-id-face` (default: teal badge)
 - `org-atomic-bad-habit-face` (default: rose badge)
 - `org-atomic-sparkline-pill-face` (background container color)
+
+---
+
+## References & Inspiration
+
+- [*Atomic Habits* by James Clear](https://jamesclear.com/atomic-habits) — The core concepts of habit identity, stacking, and the four laws of behavior change are inspired by and taken directly from this book.
