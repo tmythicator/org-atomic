@@ -24,7 +24,7 @@
   :group 'org-progress)
 
 (defcustom org-atomic-day-groups
-  '(("workdays" 1 2 3 4 5) ("weekends" 6 7))
+  '(("workdays" 1 2 3 4 5) ("weekends" 6 7) ("daily" 1 2 3 4 5 6 7))
   "Alist of day group names and their active weekdays (1=Monday, 7=Sunday)."
   :type '(alist :key-type string :value-type (repeat integer))
   :group 'org-atomic)

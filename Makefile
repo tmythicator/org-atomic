@@ -13,7 +13,8 @@ compile:
 
 EMACS_BATCH = $(EMACS) -batch -Q \
 	--eval "(require 'package)" \
-	--eval "(add-to-list 'package-archives '(\"melpa\" . \"https://melpa.org/packages/\") t)" \
+	--eval "(setq package-check-signature nil)" \
+	--eval "(setq package-archives '((\"gnu\" . \"https://elpa.gnu.org/packages/\") (\"melpa\" . \"https://melpa.org/packages/\")))" \
 	--eval "(package-initialize)" \
 	--eval "(unless package-archive-contents (package-refresh-contents))"
 
