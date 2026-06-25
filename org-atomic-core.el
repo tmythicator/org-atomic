@@ -1,15 +1,12 @@
 ;;; org-atomic-core.el --- Core domain structures and utilities for org-atomic -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2026 Alexandr Timchenko
-
 ;; Author: Alexandr Timchenko <atimchenko92@gmail.com>
-;; Keywords: outlines, hypermedia, calendar
-
-;; This file is NOT part of GNU Emacs.
+;; Version: 1.0.0
+;; License: GPL-3.0-or-later
 
 ;;; Commentary:
-
-;; Core structures, plist definition, and properties parsing for org-atomic.
+;; Core structures, plist definitions, and property parsing for org-atomic.
 
 ;;; Code:
 

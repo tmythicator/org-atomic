@@ -1,18 +1,11 @@
 ;;; org-atomic-test.el --- Tests for org-atomic -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2026 Alexandr Timchenko
-
 ;; Author: Alexandr Timchenko <atimchenko92@gmail.com>
-;; Maintainer: Alexandr Timchenko <atimchenko92@gmail.com>
-;; URL: https://github.com/tmythicator/org-atomic
-;; Keywords: outlines, hypermedia, calendar, tasks
-
-;; SPDX-License-Identifier: GPL-3.0-or-later
-
-;; This file is part of org-atomic.
+;; Version: 1.0.0
+;; License: GPL-3.0-or-later
 
 ;;; Commentary:
-
 ;; Test suite for the org-atomic package.
 
 ;;; Code:

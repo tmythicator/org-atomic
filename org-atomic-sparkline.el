@@ -1,27 +1,12 @@
 ;;; org-atomic-sparkline.el --- Sparkline rendering for org-atomic  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2026 Alexandr Timchenko
-;;
 ;; Author: Alexandr Timchenko <atimchenko92@gmail.com>
-;; Maintainer: Alexandr Timchenko <atimchenko92@gmail.com>
-;; URL: https://github.com/tmythicator/org-atomic
-;;
-;; SPDX-License-Identifier: GPL-3.0-or-later
-;;
-;; This file is part of org-atomic.
-;;
-;; org-atomic is free software: you can redistribute it and/or modify
-;; it under the terms of the GNU General Public License as published by
-;; the Free Software Foundation, either version 3 of the License, or
-;; (at your option) any later version.
-;;
-;; See the LICENSE file or <https://www.gnu.org/licenses/>.
+;; Version: 1.0.0
+;; License: GPL-3.0-or-later
 
 ;;; Commentary:
-
-;; This module contains sparkline rendering logic for org-atomic.
-;; It builds consistency histories based on active days and done dates,
-;; propertizing the resulting sparklines with the appropriate faces.
+;; Sparkline rendering and consistency history plotting for org-atomic.
 
 ;;; Code:
 

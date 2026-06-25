@@ -1,24 +1,11 @@
 ;;; org-atomic-util.el --- Utility helper functions for org-atomic  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2026 Alexandr Timchenko
-;;
 ;; Author: Alexandr Timchenko <atimchenko92@gmail.com>
-;; Maintainer: Alexandr Timchenko <atimchenko92@gmail.com>
-;; URL: https://github.com/tmythicator/org-atomic
-;;
-;; SPDX-License-Identifier: GPL-3.0-or-later
-;;
-;; This file is part of org-atomic.
-;;
-;; org-atomic is free software: you can redistribute it and/or modify
-;; it under the terms of the GNU General Public License as published by
-;; the Free Software Foundation, either version 3 of the License, or
-;; (at your option) any later version.
-;;
-;; See the LICENSE file or <https://www.gnu.org/licenses/>.
+;; Version: 1.0.0
+;; License: GPL-3.0-or-later
 
 ;;; Commentary:
-
 ;; Shared pure utility functions and parsing helpers for org-atomic.
 
 ;;; Code:

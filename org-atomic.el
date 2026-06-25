@@ -1,31 +1,16 @@
 ;;; org-atomic.el --- Modern Atomic Habits tracking for Org-mode -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2026 Alexandr Timchenko
-;;
 ;; Author: Alexandr Timchenko <atimchenko92@gmail.com>
 ;; Maintainer: Alexandr Timchenko <atimchenko92@gmail.com>
-;; URL: https://github.com/tmythicator/org-atomic
-;; Version: 0.1.0
+;; Version: 1.0.0
 ;; Package-Requires: ((emacs "27.1") (org "9.3"))
 ;; Keywords: outlines, hypermedia, calendar, tasks
-;;
-;; SPDX-License-Identifier: GPL-3.0-or-later
-;;
-;; This file is part of org-atomic.
-;;
-;; org-atomic is free software: you can redistribute it and/or modify
-;; it under the terms of the GNU General Public License as published by
-;; the Free Software Foundation, either version 3 of the License, or
-;; (at your option) any later version.
-;;
-;; See the LICENSE file or <https://www.gnu.org/licenses/>.
+;; URL: https://github.com/tmythicator/org-atomic
+;; License: GPL-3.0-or-later
 
 ;;; Commentary:
-
-;; `org-atomic' brings the philosophy of "Atomic Habits"
-;; habit tracking to Emacs `org-mode'.  It replaces standard `org-habit' graphs
-;; with modern Unicode sparklines, supports custom ID prefixes
-;; in the agenda, and enables flexible, customized target day groups.
+;; Brings the philosophy of "Atomic Habits" to Emacs org-mode.
 
 ;;; Code:
 
