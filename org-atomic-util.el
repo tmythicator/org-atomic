@@ -16,6 +16,32 @@
 (require 'calendar)
 (require 'org)
 
+;;; Constants & Regular Expressions
+
+(defconst org-atomic-util-repeater-regexp "\\([.+]?\\+[0-9]+[dwmy]\\)"
+  "Regexp matching Org repeater specifications.
+Examples: +1d, ++1d, .+1d.")
+
+(defconst org-atomic-util--time-range-bracket-regexp
+  "\\[[0-9]\\{1,2\\}:[0-9]\\{2\\}\\(?: *-[ *][0-9]\\{1,2\\}:[0-9]\\{2\\}\\)?\\]"
+  "Regexp matching bracketed time ranges.
+Examples: [07:30 - 08:30] or [7:30].")
+
+(defconst org-atomic-util--time-range-angle-regexp
+  "<[0-9]\\{1,2\\}:[0-9]\\{2\\}\\(?: *-[ *][0-9]\\{1,2\\}:[0-9]\\{2\\}\\)?>"
+  "Regexp matching angled time ranges.
+Examples: <07:30 - 08:30> or <7:30>.")
+
+(defconst org-atomic-util--time-duration-bracket-regexp
+  "\\[-[ *][0-9]\\{1,2\\}:[0-9]\\{2\\}\\]"
+  "Regexp matching bracketed duration/relative times.
+Examples: [-08:30] or [- 8:30].")
+
+(defconst org-atomic-util--time-duration-angle-regexp
+  "<-[ *][0-9]\\{1,2\\}:[0-9]\\{2\\}>"
+  "Regexp matching angled duration/relative times.
+Examples: <-08:30> or <- 8:30>.")
+
 ;;; Core Utilities
 
 (defun org-atomic-util--get-marker-from-string (str)
@@ -137,12 +163,8 @@ TIME can be an absolute day number (integer) or a Lisp time value."
      text
      (replace-regexp-in-string " +:[a-zA-Z0-9_@:]+:$" "")
      (replace-regexp-in-string ts-regex "")
-     (replace-regexp-in-string
-      "\\[[0-9]\\{1,2\\}:[0-9]\\{2\\}\\(?: *-[ *][0-9]\\{1,2\\}:[0-9]\\{2\\}\\)?\\]"
-      "")
-     (replace-regexp-in-string
-      "<[0-9]\\{1,2\\}:[0-9]\\{2\\}\\(?: *-[ *][0-9]\\{1,2\\}:[0-9]\\{2\\}\\)?>"
-      "")
+     (replace-regexp-in-string org-atomic-util--time-range-bracket-regexp "")
+     (replace-regexp-in-string org-atomic-util--time-range-angle-regexp "")
      (org-trim))))
 
 (defun org-atomic-util--clean-result-time (str)
@@ -150,15 +172,13 @@ TIME can be an absolute day number (integer) or a Lisp time value."
   (thread-last
    str
    (replace-regexp-in-string
-    "[ \t]*\\[[0-9]\\{1,2\\}:[0-9]\\{2\\}\\(?: *-[ *][0-9]\\{1,2\\}:[0-9]\\{2\\}\\)?\\]"
-    "")
+    (concat "[ \t]*" org-atomic-util--time-range-bracket-regexp) "")
    (replace-regexp-in-string
-    "[ \t]*\\[-[ *][0-9]\\{1,2\\}:[0-9]\\{2\\}\\]" "")
+    (concat "[ \t]*" org-atomic-util--time-duration-bracket-regexp) "")
    (replace-regexp-in-string
-    "[ \t]*<[0-9]\\{1,2\\}:[0-9]\\{2\\}\\(?: *-[ *][0-9]\\{1,2\\}:[0-9]\\{2\\}\\)?>"
-    "")
+    (concat "[ \t]*" org-atomic-util--time-range-angle-regexp) "")
    (replace-regexp-in-string
-    "[ \t]*<-[ *][0-9]\\{1,2\\}:[0-9]\\{2\\}>" "")))
+    (concat "[ \t]*" org-atomic-util--time-duration-angle-regexp) "")))
 
 (defun org-atomic-util--cmp-number-with-nil (a b)
   "Compare numbers A and B, treating nil as larger than any number.

@@ -36,8 +36,6 @@ than successful habit executions."
   :type '(repeat string)
   :group 'org-atomic)
 
-(defconst org-atomic-repeater-regexp "\\([.+]?\\+[0-9]+[dwmy]\\)"
-  "Regular expression matching Org repeater specifications (e.g. +1d, ++1d, .+1d).")
 
 (defun org-atomic-habit-create (&rest args)
   "Create a new atomic habit plist with default values, overridden by ARGS."
