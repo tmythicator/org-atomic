@@ -6,7 +6,7 @@
 
 ## Features
 
-1. **Unicode Sparklines**: Replaces default asterisks (`*` and `!`) with configurable Unicode blocks:
+1. **Unicode Graphs**: Replaces default asterisks (`*` and `!`) with configurable Unicode blocks:
    - `■` (Done)
    - `□` (Missed)
    - `·` (Skipped / rest day)
@@ -108,30 +108,30 @@ You can change the characters and default day groups:
 
 ```elisp
 ;; Define your own active day groups
-(setq org-atomic-day-groups
+(setq org-atomic-core-day-groups
       '(("workdays" 1 2 3 4 5)
         ("weekends" 6 7)
         ("daily" 1 2 3 4 5 6 7)
         ("gym-days" 1 3 5)))
 
 ;; Custom characters
-(setq org-atomic-done-char ?■
-      org-atomic-missed-char ?□
-      org-atomic-skipped-char ?·)
+(setq org-atomic-graph-done-char ?■
+      org-atomic-graph-missed-char ?□
+      org-atomic-graph-skipped-char ?·)
 
 ;; Exclude specific terminal states from being counted as habit completions
-(setq org-atomic-excluded-logbook-states
+(setq org-atomic-core-excluded-logbook-states
       '("CANCELED" "CANCELLED" "SKIPPED" "FAILED"))
 ```
 
 Faces available for customization:
 
-- `org-atomic-done-face` (default: green/blue)
-- `org-atomic-missed-face` (default: red/orange)
-- `org-atomic-skipped-face` (default: gray)
-- `org-atomic-id-face` (default: teal badge)
-- `org-atomic-bad-habit-face` (default: rose badge)
-- `org-atomic-sparkline-pill-face` (background container color)
+- `org-atomic-graph-done-face` (default: green/blue)
+- `org-atomic-graph-missed-face` (default: red/orange)
+- `org-atomic-graph-skipped-face` (default: gray)
+- `org-atomic-agenda-id-face` (default: teal badge)
+- `org-atomic-agenda-bad-habit-face` (default: rose badge)
+- `org-atomic-agenda-branch-face` (default: gray branch prefix)
 
 ---
 

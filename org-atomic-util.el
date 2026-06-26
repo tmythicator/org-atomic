@@ -1,9 +1,11 @@
-;;; org-atomic-util.el --- Utility helper functions for org-atomic  -*- lexical-binding: t; -*-
+;;; org-atomic-util.el --- Utility helper functions for org-atomic -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2026 Alexandr Timchenko
 ;; Author: Alexandr Timchenko <atimchenko92@gmail.com>
 ;; Assisted-by: Gemini:gemini-3.5-flash
 ;; Version: 1.1.0
+;; Package-Requires: ((emacs "27.1") (org "9.3"))
+;; URL: https://github.com/tmythicator/org-atomic
 ;; License: GPL-3.0-or-later
 
 ;;; Commentary:
@@ -16,7 +18,9 @@
 (require 'calendar)
 (require 'org)
 
+;;; ============================================================================
 ;;; Constants & Regular Expressions
+;;; ============================================================================
 
 (defconst org-atomic-util-repeater-regexp "\\([.+]?\\+[0-9]+[dwmy]\\)"
   "Regexp matching Org repeater specifications.
@@ -42,7 +46,30 @@ Examples: [-08:30] or [- 8:30].")
   "Regexp matching angled duration/relative times.
 Examples: <-08:30> or <- 8:30>.")
 
-;;; Core Utilities
+(defconst org-atomic-util--day-digit-regexp "^[1-7]$"
+  "Regexp matching a single day number from 1 to 7.")
+
+(defconst org-atomic-util--day-separator-regexp "[, ]+"
+  "Regexp matching day string separators (commas and spaces).")
+
+(defconst org-atomic-util--time-regexp
+  "\\([0-9]\\{1,2\\}\\):\\([0-9]\\{2\\}\\)"
+  "Regexp matching time strings in HH:MM format.")
+
+(defconst org-atomic-util--tags-regexp " +:[a-zA-Z0-9_@:]+:$"
+  "Regexp matching Org headline tags at the end of a line.")
+
+(defconst org-atomic-util-logbook-state-regexp
+  "- State \"\\([^\"]+\\)\"[ \t]+from[ \t]+\"\\([^\"]+\\)\"[ \t]+\\(\\[[^]]+\\]\\|\\(?:<[^>]+>\\)\\)"
+  "Regexp matching Org logbook state changes.")
+
+(defconst org-atomic-util-headline-regexp "^\\*+ "
+  "Regexp matching Org headline stars.")
+
+
+;;; ============================================================================
+;;; Marker Extraction
+;;; ============================================================================
 
 (defun org-atomic-util--get-marker-from-string (str)
   "Extract an Org marker from the text properties of STR."
@@ -94,6 +121,44 @@ heading."
    (t
     (org-atomic-util--get-marker-from-context))))
 
+
+;;; ============================================================================
+;;; Heading Resolution & Context
+;;; ============================================================================
+
+(defun org-atomic-util--goto-heading-at-point ()
+  "Move point to the beginning of the current heading safely.
+If point is already at a heading, do nothing.
+Otherwise, try to find the heading using `org-back-to-heading',
+and fallback to a regex search backward if that fails."
+  (unless (and (derived-mode-p 'org-mode) (org-at-heading-p))
+    (unless (ignore-errors
+              (org-back-to-heading t))
+      (let ((re
+             (if (boundp 'org-outline-regexp-bol)
+                 org-outline-regexp-bol
+               org-atomic-util-headline-regexp)))
+        (re-search-backward re nil t)))))
+
+(defmacro org-atomic-util-with-heading-at-marker (marker &rest body)
+  "Execute BODY with MARKER's buffer current, widened, and point at its heading."
+  (declare (indent 1) (debug t))
+  (let ((m (make-symbol "marker")))
+    `(let ((,m ,marker))
+       (when (and ,m (marker-buffer ,m))
+         (with-current-buffer (marker-buffer ,m)
+           (save-excursion
+             (save-restriction
+               (widen)
+               (goto-char ,m)
+               (org-atomic-util--goto-heading-at-point)
+               ,@body)))))))
+
+
+;;; ============================================================================
+;;; Day & Time Parsing
+;;; ============================================================================
+
 (defun org-atomic-util--parse-days (days-str)
   "Parse DAYS-STR into a list of day integers (1=Monday, 7=Sunday).
 Accepts custom day group names from `org-atomic-day-groups',
@@ -104,17 +169,20 @@ comma/space separated day numbers, or names (e.g. \"mon,tue\" or \"Monday\")."
             (cdr
              (assoc
               clean-str
-              (and (boundp 'org-atomic-day-groups)
-                   org-atomic-day-groups)))))
+              (and (boundp 'org-atomic-core-day-groups)
+                   org-atomic-core-day-groups)))))
       (if group-match
           group-match
-        (let ((tokens (split-string clean-str "[, ]+" t)))
+        (let ((tokens
+               (split-string
+                clean-str
+                org-atomic-util--day-separator-regexp t)))
           (thread-last
            (mapcar
             (lambda (tok)
               (cond
                ;; Direct integer
-               ((string-match-p "^[1-7]$" tok)
+               ((string-match-p org-atomic-util--day-digit-regexp tok)
                 (string-to-number tok))
                ;; Day name abbreviations / full names (Mon -> 1, Sun -> 7)
                (t
@@ -127,6 +195,17 @@ comma/space separated day numbers, or names (e.g. \"mon,tue\" or \"Monday\")."
                     (1+ day-idx))))))
             tokens)
            (delq nil)))))))
+
+(defun org-atomic-util--parse-time-str-to-int (str)
+  "Parse a time string (HH:MM) from STR into an integer HHMM."
+  (when (and str (string-match org-atomic-util--time-regexp str))
+    (+ (* (string-to-number (match-string 1 str)) 100)
+       (string-to-number (match-string 2 str)))))
+
+
+;;; ============================================================================
+;;; Date & Calendar Math
+;;; ============================================================================
 
 (defun org-atomic-util--time-to-day-number (time)
   "Convert TIME to an absolute day number.
@@ -145,13 +224,10 @@ TIME can be an absolute day number (integer) or a Lisp time value."
         7
       d)))
 
-(defun org-atomic-util--parse-time-str-to-int (str)
-  "Parse a time string (HH:MM) from STR into an integer HHMM."
-  (when (and str
-             (string-match
-              "\\([0-9]\\{1,2\\}\\):\\([0-9]\\{2\\}\\)" str))
-    (+ (* (string-to-number (match-string 1 str)) 100)
-       (string-to-number (match-string 2 str)))))
+
+;;; ============================================================================
+;;; Text Cleaning & Formatting
+;;; ============================================================================
 
 (defun org-atomic-util--clean-headline-text (text)
   "Clean Org metadata, tags, timestamps, and time ranges from TEXT."
@@ -161,10 +237,12 @@ TIME can be an absolute day number (integer) or a Lisp time value."
            "")))
     (thread-last
      text
-     (replace-regexp-in-string " +:[a-zA-Z0-9_@:]+:$" "")
+     (replace-regexp-in-string org-atomic-util--tags-regexp "")
      (replace-regexp-in-string ts-regex "")
-     (replace-regexp-in-string org-atomic-util--time-range-bracket-regexp "")
-     (replace-regexp-in-string org-atomic-util--time-range-angle-regexp "")
+     (replace-regexp-in-string
+      org-atomic-util--time-range-bracket-regexp "")
+     (replace-regexp-in-string
+      org-atomic-util--time-range-angle-regexp "")
      (org-trim))))
 
 (defun org-atomic-util--clean-result-time (str)
@@ -174,11 +252,18 @@ TIME can be an absolute day number (integer) or a Lisp time value."
    (replace-regexp-in-string
     (concat "[ \t]*" org-atomic-util--time-range-bracket-regexp) "")
    (replace-regexp-in-string
-    (concat "[ \t]*" org-atomic-util--time-duration-bracket-regexp) "")
+    (concat "[ \t]*" org-atomic-util--time-duration-bracket-regexp)
+    "")
    (replace-regexp-in-string
     (concat "[ \t]*" org-atomic-util--time-range-angle-regexp) "")
    (replace-regexp-in-string
-    (concat "[ \t]*" org-atomic-util--time-duration-angle-regexp) "")))
+    (concat "[ \t]*" org-atomic-util--time-duration-angle-regexp)
+    "")))
+
+
+;;; ============================================================================
+;;; Comparison Helpers
+;;; ============================================================================
 
 (defun org-atomic-util--cmp-number-with-nil (a b)
   "Compare numbers A and B, treating nil as larger than any number.

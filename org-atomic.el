@@ -23,8 +23,14 @@
 (require 'org)
 (require 'org-habit)
 (require 'org-agenda)
-(require 'org-atomic-sparkline)
+(require 'org-atomic-graph)
 (require 'org-atomic-agenda)
+
+(defgroup org-atomic nil
+  "Options concerning atomic habit tracking in Org-mode."
+  :tag "Org Atomic"
+  :group 'org-progress)
+
 (defvar org-atomic-mode)
 
 (defun org-atomic-is-active-today-p (&optional day-of-week)
@@ -32,10 +38,10 @@
 Active status is defined by the `ATOMIC_DAYS' property.  If the property
 is missing, it defaults to active (returns non-nil).
 If DAY-OF-WEEK is non-nil, use that instead of today's day of week."
-  (let* ((habit (org-atomic--parse-habit))
+  (let* ((habit (org-atomic-core-parse-habit))
          (active-days
           (when habit
-            (org-atomic-habit-days habit))))
+            (org-atomic-core-habit-days habit))))
     (or (null active-days)
         (let ((dow
                (or day-of-week
@@ -49,13 +55,12 @@ If DAY-OF-WEEK is non-nil, use that instead of today's day of week."
 
 (defun org-atomic--org-habit-build-graph-advice
     (orig-fun habit starting current ending)
-  "Advice to intercept `org-habit-build-graph' and draw an atomic sparkline.
+  "Advice to intercept `org-habit-build-graph' and draw an atomic graph.
 ORIG-FUN is the original function.  HABIT, STARTING, CURRENT, and ENDING
 are the standard arguments."
-  (let ((parsed (org-atomic--parse-habit)))
+  (let ((parsed (org-atomic-core-parse-habit)))
     (if parsed
-        (org-atomic-build-sparkline
-         habit starting current ending parsed)
+        (org-atomic-graph-build habit starting current ending parsed)
       (funcall orig-fun habit starting current ending))))
 
 (defun org-atomic--find-next-active-day (day active-days)
@@ -81,24 +86,29 @@ REPEATER is an optional repeater string."
             (format "<%s>" base-date-str))))
     (org-entry-put nil "SCHEDULED" new-ts-str)))
 
-(defun org-atomic--reschedule-to-active (habit-struct &optional base-day)
+(defun org-atomic--reschedule-to-active
+    (habit-struct &optional base-day)
   "Reschedule the habit at point to the next active day.
 HABIT-STRUCT is the parsed habit object.
 BASE-DAY is the absolute day number to start looking from (inclusive).
 If BASE-DAY is nil, it defaults to the entry's currently scheduled day."
   (let ((scheduled (org-entry-get nil "SCHEDULED")))
-    (when (and scheduled
-               (string-match org-ts-regexp3 scheduled))
+    (when (and scheduled (string-match org-ts-regexp3 scheduled))
       (let* ((ts-str (match-string 0 scheduled))
              (time (org-time-string-to-time ts-str))
              (orig-day (time-to-days time))
              (start-day (or base-day orig-day))
-             (active-days (org-atomic-habit-days habit-struct))
-             (next-day (org-atomic--find-next-active-day start-day active-days)))
+             (active-days (org-atomic-core-habit-days habit-struct))
+             (next-day
+              (org-atomic--find-next-active-day
+               start-day active-days)))
         (when (/= orig-day next-day)
-          (let ((repeater (and (string-match org-atomic-util-repeater-regexp ts-str)
-                               (match-string 1 ts-str))))
-            (org-atomic--update-scheduled-date next-day repeater)))))))
+          (let ((repeater
+                 (and (string-match
+                       org-atomic-util-repeater-regexp ts-str)
+                      (match-string 1 ts-str))))
+            (org-atomic--update-scheduled-date next-day
+                                               repeater)))))))
 
 (defun org-atomic--org-auto-repeat-maybe-advice (orig-fun &rest args)
   "Around advice for `org-auto-repeat-maybe' to adjust new SCHEDULED date.
@@ -107,10 +117,12 @@ ORIG-FUN is the original function, and ARGS are its arguments."
     (when (and repeated (org-is-habit-p))
       (let* ((resolved-marker
               (save-excursion
-                (org-back-to-heading t)
+                (org-atomic-util--goto-heading-at-point)
                 (point-marker)))
-             (habit-struct (org-atomic--parse-habit resolved-marker)))
-        (when (and habit-struct (org-atomic-habit-days habit-struct))
+             (habit-struct
+              (org-atomic-core-parse-habit resolved-marker)))
+        (when (and habit-struct
+                   (org-atomic-core-habit-days habit-struct))
           (org-atomic--reschedule-to-active habit-struct))))
     repeated))
 
@@ -125,13 +137,13 @@ date to scan, and ARGS are additional arguments."
       (let* ((marker (org-atomic-util--find-marker item))
              (habit
               (when marker
-                (org-atomic--parse-habit marker)))
+                (org-atomic-core-parse-habit marker)))
              (keep t))
-        (when (and habit (org-atomic-habit-days habit))
+        (when (and habit (org-atomic-core-habit-days habit))
           (let* ((dow
                   (org-atomic-util--day-to-dow
                    (calendar-day-of-week date)))
-                 (active-days (org-atomic-habit-days habit)))
+                 (active-days (org-atomic-core-habit-days habit)))
             (unless (member dow active-days)
               (setq keep nil))))
         (when keep
@@ -154,16 +166,21 @@ the past to the current day (or the next active day)."
             (let ((was-modified (buffer-modified-p)))
               (org-map-entries
                (lambda ()
-                 (let* ((habit (org-atomic--parse-habit)))
+                 (let* ((habit (org-atomic-core-parse-habit)))
                    (when habit
-                     (let ((scheduled (org-entry-get nil "SCHEDULED")))
+                     (let ((scheduled
+                            (org-entry-get nil "SCHEDULED")))
                        (when (and scheduled
-                                  (string-match org-ts-regexp3 scheduled))
+                                  (string-match
+                                   org-ts-regexp3 scheduled))
                          (let* ((ts-str (match-string 0 scheduled))
-                                (time (org-time-string-to-time ts-str))
+                                (time
+                                 (org-time-string-to-time ts-str))
                                 (scheduled-day (time-to-days time)))
                            (when (< scheduled-day (org-today))
-                             (org-atomic--reschedule-to-active habit (org-today)))))))))
+                             (org-atomic--reschedule-to-active
+                              habit
+                              (org-today)))))))))
                "+STYLE=\"habit\"")
               (when (and (not was-modified) (buffer-modified-p))
                 (save-buffer)))))))))
@@ -182,7 +199,7 @@ the past to the current day (or the next active day)."
    :around #'org-atomic--org-habit-build-graph-advice)
   (advice-add
    'org-agenda-format-item
-   :around #'org-atomic--org-agenda-format-item-advice)
+   :around #'org-atomic-agenda--org-agenda-format-item-advice)
   (advice-add
    'org-auto-repeat-maybe
    :around #'org-atomic--org-auto-repeat-maybe-advice)
@@ -194,7 +211,7 @@ the past to the current day (or the next active day)."
    :before #'org-atomic-roll-over-habits)
   (add-hook
    'org-agenda-finalize-hook #'org-atomic-agenda-finalize-faces)
-  (org-atomic--enable-sorting)
+  (org-atomic-agenda--enable-sorting)
   (org-atomic--refresh-agenda))
 
 (defun org-atomic--disable ()
@@ -203,7 +220,7 @@ the past to the current day (or the next active day)."
    'org-habit-build-graph #'org-atomic--org-habit-build-graph-advice)
   (advice-remove
    'org-agenda-format-item
-   #'org-atomic--org-agenda-format-item-advice)
+   #'org-atomic-agenda--org-agenda-format-item-advice)
   (advice-remove
    'org-auto-repeat-maybe #'org-atomic--org-auto-repeat-maybe-advice)
   (advice-remove
@@ -213,7 +230,7 @@ the past to the current day (or the next active day)."
    'org-agenda-prepare-buffers #'org-atomic-roll-over-habits)
   (remove-hook
    'org-agenda-finalize-hook #'org-atomic-agenda-finalize-faces)
-  (org-atomic--disable-sorting)
+  (org-atomic-agenda--disable-sorting)
   (org-atomic--refresh-agenda))
 
 ;;;###autoload
