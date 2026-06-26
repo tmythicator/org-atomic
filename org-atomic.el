@@ -3,7 +3,8 @@
 ;; Copyright (C) 2026 Alexandr Timchenko
 ;; Author: Alexandr Timchenko <atimchenko92@gmail.com>
 ;; Maintainer: Alexandr Timchenko <atimchenko92@gmail.com>
-;; Version: 1.0.1
+;; Assisted-by: Gemini:gemini-3.5-flash
+;; Version: 1.1.0
 ;; Package-Requires: ((emacs "27.1") (org "9.3"))
 ;; Keywords: outlines, hypermedia, calendar, tasks
 ;; URL: https://github.com/tmythicator/org-atomic
@@ -80,6 +81,25 @@ REPEATER is an optional repeater string."
             (format "<%s>" base-date-str))))
     (org-entry-put nil "SCHEDULED" new-ts-str)))
 
+(defun org-atomic--reschedule-to-active (habit-struct &optional base-day)
+  "Reschedule the habit at point to the next active day.
+HABIT-STRUCT is the parsed habit object.
+BASE-DAY is the absolute day number to start looking from (inclusive).
+If BASE-DAY is nil, it defaults to the entry's currently scheduled day."
+  (let ((scheduled (org-entry-get nil "SCHEDULED")))
+    (when (and scheduled
+               (string-match org-ts-regexp3 scheduled))
+      (let* ((ts-str (match-string 0 scheduled))
+             (time (org-time-string-to-time ts-str))
+             (orig-day (time-to-days time))
+             (start-day (or base-day orig-day))
+             (active-days (org-atomic-habit-days habit-struct))
+             (next-day (org-atomic--find-next-active-day start-day active-days)))
+        (when (/= orig-day next-day)
+          (let ((repeater (and (string-match org-atomic-util-repeater-regexp ts-str)
+                               (match-string 1 ts-str))))
+            (org-atomic--update-scheduled-date next-day repeater)))))))
+
 (defun org-atomic--org-auto-repeat-maybe-advice (orig-fun &rest args)
   "Around advice for `org-auto-repeat-maybe' to adjust new SCHEDULED date.
 ORIG-FUN is the original function, and ARGS are its arguments."
@@ -91,25 +111,7 @@ ORIG-FUN is the original function, and ARGS are its arguments."
                 (point-marker)))
              (habit-struct (org-atomic--parse-habit resolved-marker)))
         (when (and habit-struct (org-atomic-habit-days habit-struct))
-          (let ((scheduled (org-entry-get nil "SCHEDULED")))
-            (when (and scheduled
-                       (string-match org-ts-regexp3 scheduled))
-              (let* ((ts-str (match-string 0 scheduled))
-                     (time (org-time-string-to-time ts-str))
-                     (day (time-to-days time))
-                     (active-days
-                      (org-atomic-habit-days habit-struct))
-                     (next-day
-                      (org-atomic--find-next-active-day
-                       day active-days)))
-                (when (/= day next-day)
-                  (let ((repeater
-                         (and (string-match
-                               org-atomic-repeater-regexp ts-str)
-                              (match-string 1 ts-str))))
-                    (org-atomic--update-scheduled-date
-                     next-day
-                     repeater)))))))))
+          (org-atomic--reschedule-to-active habit-struct))))
     repeated))
 
 (defun org-atomic--org-agenda-get-day-entries-advice
@@ -154,30 +156,14 @@ the past to the current day (or the next active day)."
                (lambda ()
                  (let* ((habit (org-atomic--parse-habit)))
                    (when habit
-                     (let ((scheduled
-                            (org-entry-get nil "SCHEDULED")))
+                     (let ((scheduled (org-entry-get nil "SCHEDULED")))
                        (when (and scheduled
-                                  (string-match
-                                   org-ts-regexp3 scheduled))
+                                  (string-match org-ts-regexp3 scheduled))
                          (let* ((ts-str (match-string 0 scheduled))
-                                (time
-                                 (org-time-string-to-time ts-str))
-                                (scheduled-day (time-to-days time))
-                                (today (org-today)))
-                           (when (< scheduled-day today)
-                             (let* ((active-days
-                                     (org-atomic-habit-days habit))
-                                    (next-day
-                                     (org-atomic--find-next-active-day
-                                      today active-days))
-                                    (repeater
-                                     (and (string-match
-                                           org-atomic-repeater-regexp
-                                           ts-str)
-                                          (match-string 1 ts-str))))
-                               (org-atomic--update-scheduled-date
-                                next-day
-                                repeater)))))))))
+                                (time (org-time-string-to-time ts-str))
+                                (scheduled-day (time-to-days time)))
+                           (when (< scheduled-day (org-today))
+                             (org-atomic--reschedule-to-active habit (org-today)))))))))
                "+STYLE=\"habit\"")
               (when (and (not was-modified) (buffer-modified-p))
                 (save-buffer)))))))))

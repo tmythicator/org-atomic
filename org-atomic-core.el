@@ -2,7 +2,8 @@
 
 ;; Copyright (C) 2026 Alexandr Timchenko
 ;; Author: Alexandr Timchenko <atimchenko92@gmail.com>
-;; Version: 1.0.1
+;; Assisted-by: Gemini:gemini-3.5-flash
+;; Version: 1.1.0
 ;; License: GPL-3.0-or-later
 
 ;;; Commentary:
@@ -35,8 +36,6 @@ than successful habit executions."
   :type '(repeat string)
   :group 'org-atomic)
 
-(defconst org-atomic-repeater-regexp "\\([.+]?\\+[0-9]+[dwmy]\\)"
-  "Regular expression matching Org repeater specifications (e.g. +1d, ++1d, .+1d).")
 
 (defun org-atomic-habit-create (&rest args)
   "Create a new atomic habit plist with default values, overridden by ARGS."
@@ -110,6 +109,22 @@ than successful habit executions."
   "Get :days from HABIT plist."
   (plist-get habit :days))
 
+(defconst org-atomic--property-mapping
+  '(("ATOMIC_ID"           . :id)
+    ("ATOMIC_NEXT"         . :next)
+    ("ATOMIC_DAYS"         . :days)
+    ("ATOMIC_TYPE"         . :type)
+    ("ATOMIC_WHY"          . :why)
+    ("ATOMIC_OBVIOUS"      . :obvious)
+    ("ATOMIC_INVISIBLE"    . :invisible)
+    ("ATOMIC_ATTRACTIVE"   . :attractive)
+    ("ATOMIC_UNATTRACTIVE" . :unattractive)
+    ("ATOMIC_EASY"         . :easy)
+    ("ATOMIC_HARD"         . :hard)
+    ("ATOMIC_SATISFYING"   . :satisfying)
+    ("ATOMIC_UNSATISFYING" . :unsatisfying))
+  "Mapping from Org properties to habit plist keys.")
+
 (defun org-atomic--parse-habit (&optional marker txt)
   "Parse all ATOMIC_* properties at MARKER or in TXT.
 Returns an `org-atomic-habit' plist if the entry is an atomic habit."
@@ -120,50 +135,25 @@ Returns an `org-atomic-habit' plist if the entry is an atomic habit."
         (save-excursion
           (goto-char resolved-marker)
           (let* ((props (org-entry-properties (point)))
-                 (id (cdr (assoc "ATOMIC_ID" props)))
-                 (days-str (cdr (assoc "ATOMIC_DAYS" props)))
-                 (next-id (cdr (assoc "ATOMIC_NEXT" props)))
-                 (type (cdr (assoc "ATOMIC_TYPE" props)))
-                 (why (cdr (assoc "ATOMIC_WHY" props)))
-                 (obvious (cdr (assoc "ATOMIC_OBVIOUS" props)))
-                 (invisible (cdr (assoc "ATOMIC_INVISIBLE" props)))
-                 (attractive (cdr (assoc "ATOMIC_ATTRACTIVE" props)))
-                 (unattractive
-                  (cdr (assoc "ATOMIC_UNATTRACTIVE" props)))
-                 (easy (cdr (assoc "ATOMIC_EASY" props)))
-                 (hard (cdr (assoc "ATOMIC_HARD" props)))
-                 (satisfying (cdr (assoc "ATOMIC_SATISFYING" props)))
-                 (unsatisfying
-                  (cdr (assoc "ATOMIC_UNSATISFYING" props))))
-            (when (or id
-                      days-str
-                      next-id
-                      type
-                      why
-                      obvious
-                      invisible
-                      attractive
-                      unattractive
-                      easy
-                      hard
-                      satisfying
-                      unsatisfying)
-              (org-atomic-habit-create
-               :id id
-               :next next-id
-               :days
-               (when days-str
-                 (org-atomic-util--parse-days days-str))
-               :type (or type "good")
-               :why why
-               :obvious obvious
-               :invisible invisible
-               :attractive attractive
-               :unattractive unattractive
-               :easy easy
-               :hard hard
-               :satisfying satisfying
-               :unsatisfying unsatisfying))))))))
+                 (habit-args nil)
+                 (has-any nil))
+            (dolist (map org-atomic--property-mapping)
+              (let* ((prop-name (car map))
+                     (plist-key (cdr map))
+                     (val (cdr (assoc prop-name props))))
+                (when val
+                  (setq has-any t)
+                  (cond
+                   ((eq plist-key :days)
+                    (setq val (org-atomic-util--parse-days val)))
+                   ((and (eq plist-key :type)
+                         (string-empty-p (string-trim val)))
+                    (setq val "good")))
+                  (setq habit-args (plist-put habit-args plist-key val)))))
+            (when has-any
+              (unless (plist-get habit-args :type)
+                (setq habit-args (plist-put habit-args :type "good")))
+              (apply #'org-atomic-habit-create habit-args))))))))
 
 ;;; Caches
 
