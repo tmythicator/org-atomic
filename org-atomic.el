@@ -3,7 +3,7 @@
 ;; Copyright (C) 2026 Alexandr Timchenko
 ;; Author: Alexandr Timchenko <atimchenko92@gmail.com>
 ;; Maintainer: Alexandr Timchenko <atimchenko92@gmail.com>
-;; Version: 1.0.0
+;; Version: 1.0.1
 ;; Package-Requires: ((emacs "27.1") (org "9.3"))
 ;; Keywords: outlines, hypermedia, calendar, tasks
 ;; URL: https://github.com/tmythicator/org-atomic

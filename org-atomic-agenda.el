@@ -2,7 +2,7 @@
 
 ;; Copyright (C) 2026 Alexandr Timchenko
 ;; Author: Alexandr Timchenko <atimchenko92@gmail.com>
-;; Version: 1.0.0
+;; Version: 1.0.1
 ;; License: GPL-3.0-or-later
 
 ;;; Commentary:
