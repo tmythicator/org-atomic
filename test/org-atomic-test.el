@@ -194,8 +194,8 @@
         (push (point-marker) markers))
       (setq markers (nreverse markers))
 
-      ;; There should be 5 habits now (including Hardcore Static Stretching)
-      (should (= (length markers) 5))
+      ;; There should be 6 habits now
+      (should (= (length markers) 6))
 
       (let* ((gym-marker (nth 0 markers))       ; Strength Training (Gym)
              (code-marker (nth 1 markers))      ; Org-Atomic Coding (Code)
@@ -355,8 +355,8 @@
       (let* ((marker (point-marker))
              (txt (propertize "TODO Hardcore Static Stretching" 'org-marker marker))
              (formatted (org-atomic--org-agenda-format-item-advice
-                          (lambda (_extra text &rest _) text)
-                          nil txt)))
+                         (lambda (_extra text &rest _) text)
+                         nil txt)))
         ;; Should contain the hook ╰─> before TODO, and the ID Stretch after TODO
         (should (string-match "╰─> *TODO *\\[Stretch\\]" formatted)))
 
@@ -369,12 +369,70 @@
              (result-formatted "  Habits:      10:00 ---------- TODO Scrolling Social Media [- 11:00]")
              (txt (propertize "TODO Scrolling Social Media [10:00 - 11:00]" 'org-marker marker))
              (formatted (org-atomic--org-agenda-format-item-advice
-                          (lambda (_extra _text &rest _) result-formatted)
-                          nil txt)))
+                         (lambda (_extra _text &rest _) result-formatted)
+                         nil txt)))
         ;; Should contain the ID prefix "[Scroll] " after "TODO"
         (should (string-match "TODO *\\[Scroll\\]" formatted))
         ;; Redundant time range remnant should be completely removed
         (should-not (string-match-p "- 11:00" formatted))))))
+
+(ert-deftest org-atomic-test-roll-over-habits ()
+  "Test that overdue habits (good and bad) are rolled over to the current day (or next active day)."
+  (let* ((temp-file (make-temp-file "org-atomic-test-roll-over" nil ".org"))
+         (fixture-file (expand-file-name "test/fixtures/mock-habits.org"
+                                         (or (bound-and-true-p default-directory) ".")))
+         (org-agenda-files (list temp-file))
+         (org-atomic-mode t))
+    (unwind-protect
+        (progn
+          (copy-file fixture-file temp-file t)
+
+          ;; Test 1: Today is Friday 26 June 2026 (a workday, active day)
+          ;; - Youtube (bad) is scheduled for Thu 25 June.
+          ;; - Stretch (good) is scheduled for Wed 24 June.
+          ;; Both should roll over to Friday 26 June.
+          (cl-letf* (((symbol-function 'org-today)
+                      (lambda ()
+                        (time-to-days (encode-time 0 0 0 26 6 2026)))))
+            (org-atomic-roll-over-habits)
+            (with-current-buffer (find-file-noselect temp-file)
+              (save-excursion
+                ;; Check Youtube
+                (goto-char (point-min))
+                (search-forward "* TODO Youtube")
+                (let ((scheduled (org-entry-get nil "SCHEDULED")))
+                  (should (string-match-p "2026-06-26" scheduled)))
+                ;; Check Stretch
+                (goto-char (point-min))
+                (search-forward "* TODO Hardcore Static Stretching")
+                (let ((scheduled (org-entry-get nil "SCHEDULED")))
+                  (should (string-match-p "2026-06-26" scheduled))))))
+
+          (let ((buf (get-file-buffer temp-file)))
+            (when buf
+              (kill-buffer buf)))
+          (copy-file fixture-file temp-file t)
+
+          ;; Test 2: Today is Saturday 27 June 2026 (weekend, inactive day)
+          ;; - Youtube (bad, workdays) should roll over to Monday 29 June.
+          ;; - Stretch (good, workdays) should roll over to Monday 29 June.
+          (cl-letf* (((symbol-function 'org-today)
+                      (lambda ()
+                        (time-to-days (encode-time 0 0 0 27 6 2026)))))
+            (org-atomic-roll-over-habits)
+            (with-current-buffer (find-file-noselect temp-file)
+              (save-excursion
+                ;; Check Youtube
+                (goto-char (point-min))
+                (search-forward "* TODO Youtube")
+                (let ((scheduled (org-entry-get nil "SCHEDULED")))
+                  (should (string-match-p "2026-06-29" scheduled)))
+                ;; Check Stretch
+                (goto-char (point-min))
+                (search-forward "* TODO Hardcore Static Stretching")
+                (let ((scheduled (org-entry-get nil "SCHEDULED")))
+                  (should (string-match-p "2026-06-29" scheduled)))))))
+      (delete-file temp-file))))
 
 (provide 'org-atomic-test)
 ;;; org-atomic-test.el ends here

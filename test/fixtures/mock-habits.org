@@ -56,3 +56,12 @@
   :END:
   - State "CANCELED"     from "TODO"       [2026-06-24 Wed 17:13]
   - State "DONE"       from "TODO"       [2026-06-23 Tue]
+
+* TODO Youtube
+  SCHEDULED: <2026-06-25 Thu .+1d>
+  :PROPERTIES:
+  :STYLE:    habit
+  :ATOMIC_ID: Youtube
+  :ATOMIC_TYPE: bad
+  :ATOMIC_DAYS: workdays
+  :END:
