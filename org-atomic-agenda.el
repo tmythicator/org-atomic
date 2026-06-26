@@ -196,7 +196,9 @@ Returns a cons cell (INDENT-STR . LABEL-STR)."
     (cons indent-str label-str)))
 
 (defun org-atomic--splice-prefix (result txt indent-str id-str)
-  "Splice INDENT-STR and ID-STR into the formatted agenda RESULT string based on TXT."
+  "Splice INDENT-STR and ID-STR into RESULT based on TXT.
+RESULT is the formatted agenda string.  INDENT-STR is the stacked
+habit indentation, and ID-STR is the prepended habit identifier."
   (let* ((keywords
           (if (boundp 'org-todo-keywords-1)
               org-todo-keywords-1

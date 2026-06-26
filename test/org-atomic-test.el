@@ -100,10 +100,7 @@
 (ert-deftest org-atomic-test-bad-habit-sparkline ()
   "Test sparkline building logic for Bad Habits."
   (let* ((day-fri (time-to-days (encode-time 0 0 0 26 6 2026))) ; Absolute day (Friday)
-         (day-sat (time-to-days (encode-time 0 0 0 27 6 2026))) ; Saturday
          (day-sun (time-to-days (encode-time 0 0 0 28 6 2026))) ; Sunday
-         (day-mon (time-to-days (encode-time 0 0 0 29 6 2026))) ; Monday
-         (day-tue (time-to-days (encode-time 0 0 0 30 6 2026))) ; Tuesday
          (habit (list "Scrolling Social Media"
                       ".+1d" nil nil
                       ;; done dates (Friday and Sunday)
@@ -304,7 +301,7 @@
            ;; Run filtering advice for Strength Training (weekends) on workday
            ;; In mock-habits.org, Gym is weekends only.
            (workday-entries (org-atomic--org-agenda-get-day-entries-advice
-                             (lambda (file date &rest _)
+                             (lambda (_file _date &rest _)
                                ;; mock returning the agenda item for Gym
                                (list (propertize "Gym" 'org-marker
                                                  (with-current-buffer (find-file-noselect (car org-agenda-files))
@@ -314,7 +311,7 @@
                                                      (point-marker))))))
                              (car org-agenda-files) workday))
            (weekend-entries (org-atomic--org-agenda-get-day-entries-advice
-                             (lambda (file date &rest _)
+                             (lambda (_file _date &rest _)
                                (list (propertize "Gym" 'org-marker
                                                  (with-current-buffer (find-file-noselect (car org-agenda-files))
                                                    (save-excursion

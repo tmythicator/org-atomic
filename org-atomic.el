@@ -24,6 +24,7 @@
 (require 'org-agenda)
 (require 'org-atomic-sparkline)
 (require 'org-atomic-agenda)
+(defvar org-atomic-mode)
 
 (defun org-atomic-is-active-today-p (&optional day-of-week)
   "Check if the habit at point is scheduled to be active today.
@@ -68,7 +69,8 @@ DAY is an integer day number.  ACTIVE-DAYS is a list of active weekdays."
 
 (defun org-atomic--update-scheduled-date (day &optional repeater)
   "Set the SCHEDULED property of the entry at point to DAY.
-DAY is an integer representing day number.  REPEATER is an optional repeater string."
+DAY is an integer representing day number.
+REPEATER is an optional repeater string."
   (let* ((epoch-offset (time-to-days (encode-time 0 0 0 1 1 1970)))
          (new-time (days-to-time (- day epoch-offset)))
          (base-date-str (format-time-string "%Y-%m-%d %a" new-time))
