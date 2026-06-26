@@ -1,5 +1,7 @@
 # org-atomic
 
+![org-atomic demo](assets/org-atomic-demo.png)
+
 `org-atomic` is a habit tracker for Emacs Org-mode. It replaces default asterisk-based `org-habit` graphs with clean Unicode blocks, and adds day groups, habit stacking, and tooltips inspired by the book _Atomic Habits_ by James Clear.
 
 ## Features
@@ -93,6 +95,9 @@ To solve this, `org-atomic` does some smart behind-the-scenes filtering:
   :ATOMIC_WHY:        Boosts recovery
   :ATOMIC_EASY:       Just 2 minutes
   :END:
+
+> [!TIP]
+> For more comprehensive examples, check out [mock-habits.org](test/fixtures/mock-habits.org).
 ```
 
 ---
