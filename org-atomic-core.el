@@ -1,15 +1,12 @@
 ;;; org-atomic-core.el --- Core domain structures and utilities for org-atomic -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2026 Alexandr Timchenko
-
 ;; Author: Alexandr Timchenko <atimchenko92@gmail.com>
-;; Keywords: outlines, hypermedia, calendar
-
-;; This file is NOT part of GNU Emacs.
+;; Version: 1.0.0
+;; License: GPL-3.0-or-later
 
 ;;; Commentary:
-
-;; Core structures, plist definition, and properties parsing for org-atomic.
+;; Core structures, plist definitions, and property parsing for org-atomic.
 
 ;;; Code:
 
@@ -37,6 +34,9 @@ These states represent canceled, skipped, or failed attempts rather
 than successful habit executions."
   :type '(repeat string)
   :group 'org-atomic)
+
+(defconst org-atomic-repeater-regexp "\\([.+]?\\+[0-9]+[dwmy]\\)"
+  "Regular expression matching Org repeater specifications (e.g. +1d, ++1d, .+1d).")
 
 (defun org-atomic-habit-create (&rest args)
   "Create a new atomic habit plist with default values, overridden by ARGS."
