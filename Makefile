@@ -2,6 +2,7 @@
 
 EMACS ?= emacs
 
+# Find all elisp files except test files
 ELS = $(filter-out test/%, $(wildcard *.el))
 TEST_ELS = $(wildcard test/*.el)
 
@@ -13,8 +14,9 @@ compile:
 
 EMACS_BATCH = $(EMACS) -batch -Q \
 	--eval "(require 'package)" \
+	--eval "(setq package-user-dir (expand-file-name \"org-atomic-elpa\" temporary-file-directory))" \
 	--eval "(setq package-check-signature nil)" \
-	--eval "(setq package-archives '((\"gnu\" . \"https://elpa.gnu.org/packages/\") (\"melpa\" . \"https://melpa.org/packages/\")))" \
+	--eval "(add-to-list 'package-archives '(\"melpa\" . \"https://melpa.org/packages/\") t)" \
 	--eval "(package-initialize)" \
 	--eval "(unless package-archive-contents (package-refresh-contents))"
 
@@ -37,7 +39,7 @@ lint:
 	$(EMACS_BATCH) \
 		--eval "(unless (package-installed-p 'package-lint) (package-install 'package-lint))" \
 		--eval "(require 'package-lint)" \
-		-f package-lint-batch-and-exit org-atomic.el
+		-f package-lint-batch-and-exit $(ELS)
 
 checkdoc:
 	$(EMACS) -Q -batch \
