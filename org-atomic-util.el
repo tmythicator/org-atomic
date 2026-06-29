@@ -284,5 +284,13 @@ Returns -1 if A < B, 1 if A > B, or nil if they are equal or both nil."
    (t
     nil)))
 
+(defun org-atomic-util-calculate-percentage
+    (success-count active-count)
+  "Calculate the percentage of SUCCESS-COUNT out of ACTIVE-COUNT.
+Return 0 if ACTIVE-COUNT is 0."
+  (if (> active-count 0)
+      (round (* 100 (/ success-count (float active-count))))
+    0))
+
 (provide 'org-atomic-util)
 ;;; org-atomic-util.el ends here

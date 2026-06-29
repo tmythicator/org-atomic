@@ -47,6 +47,11 @@
   :type 'character
   :group 'org-atomic-graph)
 
+(defcustom org-atomic-graph-show-percentage t
+  "If non-nil, append the completion percentage to the consistency graph."
+  :type 'boolean
+  :group 'org-atomic-graph)
+
 (defface org-atomic-graph-done-face
   '((((background light))
      (:foreground
@@ -103,10 +108,11 @@
   "Face for consistency graph boundary symbols."
   :group 'org-atomic-graph)
 
-(defun org-atomic-graph-draw (history)
+(defun org-atomic-graph-draw (history &optional show-percentage)
   "Draw a consistency graph from a HISTORY list.
 Each element in HISTORY should be one of `good-done', `good-missed',
-`bad-done', `bad-avoided', `skipped', or `future'."
+`bad-done', `bad-avoided', `skipped', or `future'.
+If SHOW-PERCENTAGE is non-nil, append the completion percentage."
   (let* ((start-str
           (propertize (string org-atomic-graph-start-char)
                       'face
@@ -138,8 +144,29 @@ Each element in HISTORY should be one of `good-done', `good-missed',
               (t
                (propertize " "
                            'face 'org-atomic-graph-skipped-face))))
-           history)))
-    (concat start-str (apply #'concat body-strs) end-str)))
+           history))
+         (drawn (concat start-str (apply #'concat body-strs) end-str))
+         (pct-str
+          (if show-percentage
+              (let* ((success-count
+                      (+ (cl-count-if
+                          (lambda (s) (eq s 'good-done)) history)
+                         (cl-count-if
+                          (lambda (s) (eq s 'bad-avoided)) history)))
+                     (active-count
+                      (+ success-count
+                         (cl-count-if
+                          (lambda (s) (eq s 'good-missed)) history)
+                         (cl-count-if
+                          (lambda (s) (eq s 'bad-done)) history)))
+                     (pct
+                      (org-atomic-util-calculate-percentage
+                       success-count active-count)))
+                (propertize (format " %d%%" pct)
+                            'face
+                            'org-atomic-graph-skipped-face))
+            "")))
+    (concat drawn pct-str)))
 
 (defun org-atomic-graph--get-non-canceled-done-dates
     (&optional marker)
@@ -218,7 +245,8 @@ If PARSED is a non-nil habit plist, use it; otherwise parse the habit."
                 (push 'bad-done history)
               (push 'bad-avoided history)))))
         (setq d (1+ d))))
-    (org-atomic-graph-draw (nreverse history))))
+    (org-atomic-graph-draw (nreverse history)
+                           org-atomic-graph-show-percentage)))
 
 (provide 'org-atomic-graph)
 ;;; org-atomic-graph.el ends here
