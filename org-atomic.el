@@ -25,6 +25,7 @@
 (require 'org-agenda)
 (require 'org-atomic-graph)
 (require 'org-atomic-agenda)
+(require 'org-atomic-stats)
 
 (defgroup org-atomic nil
   "Options concerning atomic habit tracking in Org-mode."
