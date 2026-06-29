@@ -3,7 +3,7 @@
 ;; Copyright (C) 2026 Alexandr Timchenko
 ;; Author: Alexandr Timchenko <atimchenko92@gmail.com>
 ;; Assisted-by: Gemini:gemini-3.5-flash
-;; Version: 1.2.0
+;; Version: 1.3.0
 ;; Package-Requires: ((emacs "27.1") (org "9.3"))
 ;; URL: https://github.com/tmythicator/org-atomic
 ;; License: GPL-3.0-or-later
@@ -283,6 +283,14 @@ Returns -1 if A < B, 1 if A > B, or nil if they are equal or both nil."
     1)
    (t
     nil)))
+
+(defun org-atomic-util-calculate-percentage
+    (success-count active-count)
+  "Calculate the percentage of SUCCESS-COUNT out of ACTIVE-COUNT.
+Return 0 if ACTIVE-COUNT is 0."
+  (if (> active-count 0)
+      (round (* 100 (/ success-count (float active-count))))
+    0))
 
 (provide 'org-atomic-util)
 ;;; org-atomic-util.el ends here

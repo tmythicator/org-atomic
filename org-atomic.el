@@ -4,7 +4,7 @@
 ;; Author: Alexandr Timchenko <atimchenko92@gmail.com>
 ;; Maintainer: Alexandr Timchenko <atimchenko92@gmail.com>
 ;; Assisted-by: Gemini:gemini-3.5-flash
-;; Version: 1.2.0
+;; Version: 1.3.0
 ;; Package-Requires: ((emacs "27.1") (org "9.3"))
 ;; Keywords: outlines, hypermedia, calendar, tasks
 ;; URL: https://github.com/tmythicator/org-atomic
@@ -25,6 +25,7 @@
 (require 'org-agenda)
 (require 'org-atomic-graph)
 (require 'org-atomic-agenda)
+(require 'org-atomic-stats)
 
 (defgroup org-atomic nil
   "Options concerning atomic habit tracking in Org-mode."
