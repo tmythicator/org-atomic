@@ -14,6 +14,7 @@
 3. **Agenda Prefixes**: Prepends a styled habit ID prefix (e.g. `[ Gym ] Strength Training`) in the Org Agenda.
 4. **Habit Stacking**: Chain habits sequentially to form dependencies in the agenda view.
 5. **Contextual Tooltips**: Displays prompts and cues on hover (e.g., motivation, ease triggers).
+6. **Habit Statistics & Streaks Dashboard**: A command (`M-x org-atomic-stats`) to view a beautifully aligned dashboard of habit statistics, completion rates, streaks, rules, and sparklines.
 
 ---
 
@@ -99,6 +100,20 @@ To solve this, `org-atomic` does some smart behind-the-scenes filtering:
 > [!TIP]
 > For more comprehensive examples, check out [mock-habits.org](test/fixtures/mock-habits.org).
 ```
+
+---
+
+## Habit Statistics Dashboard
+
+![org-atomic stats](assets/org-atomic-stats.png)
+
+`org-atomic` includes a lightweight, clean dashboard to track your habit performance over time.
+
+- `M-x org-atomic-stats`: Opens the Org-Atomic statistics dashboard in a new buffer (`*org-atomic-stats*`).
+  - `g`: Refresh the dashboard.
+  - `q`: Close/quit the dashboard buffer.
+
+By default, the agenda consistency graph shows the completion rate percentage at the end of the graph (e.g. `[■■·■□·■] 80%`). You can toggle this behavior using the `org-atomic-graph-show-percentage` option (defaults to `t`).
 
 ---
 
