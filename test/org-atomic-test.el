@@ -286,7 +286,11 @@
       (insert "<2026-06-23 Tue .+1d>")
       (beginning-of-line)
       ;; Complete the task, which triggers auto-repeat
-      (org-todo "DONE")
+      (cl-letf* (((symbol-function 'org-today)
+                  (lambda () (time-to-days (encode-time 0 0 0 23 6 2026))))
+                 ((symbol-function 'current-time)
+                  (lambda () (encode-time 0 0 0 23 6 2026))))
+        (org-todo "DONE"))
       ;; Check that the new SCHEDULED date is Saturday, June 27, 2026
       (let ((scheduled (org-entry-get nil "SCHEDULED")))
         (should (string-match-p "2026-06-27 Sat" scheduled))))))
@@ -379,7 +383,7 @@
   "Test that overdue habits (good and bad) are rolled over to the current day (or next active day)."
   (let* ((temp-file (make-temp-file "org-atomic-test-roll-over" nil ".org"))
          (fixture-file (expand-file-name "test/fixtures/mock-habits.org"
-                                          (or (bound-and-true-p default-directory) ".")))
+                                         (or (bound-and-true-p default-directory) ".")))
          (org-agenda-files (list temp-file))
          (org-atomic-mode t))
     (unwind-protect
@@ -432,6 +436,64 @@
                 (let ((scheduled (org-entry-get nil "SCHEDULED")))
                   (should (string-match-p "2026-06-29" scheduled)))))))
       (delete-file temp-file))))
+
+(ert-deftest org-atomic-test-stats-calculations ()
+  "Test statistics calculation functions: streaks and rates."
+  (let* ((habit-good (org-atomic-core-habit-create
+                      :id "TestGood"
+                      :type "good"
+                      :days '(1 2 3 4 5)))
+         (habit-bad (org-atomic-core-habit-create
+                     :id "TestBad"
+                     :type "bad"
+                     :days '(1 2 3 4 5)))
+         (day-wed (time-to-days (encode-time 0 0 0 24 6 2026)))
+         (day-tue (1- day-wed))
+         (day-mon (1- day-tue))
+         (day-sun (1- day-mon))
+         (day-sat (1- day-sun))
+         (day-fri (1- day-sat)))
+    (cl-letf* (((symbol-function 'org-today) (lambda () day-wed)))
+      ;; 1. Test streaks for Good Habit
+      (let* ((done-dates (list day-tue day-wed))
+             (streaks (org-atomic-stats--calculate-streaks habit-good done-dates)))
+        (should (= (plist-get streaks :current-streak) 2))
+        (should (= (plist-get streaks :longest-streak) 2)))
+      (let* ((done-dates (list day-fri day-mon day-tue day-wed))
+             (streaks (org-atomic-stats--calculate-streaks habit-good done-dates)))
+        (should (= (plist-get streaks :current-streak) 4))
+        (should (= (plist-get streaks :longest-streak) 4)))
+      (let* ((done-dates (list day-mon day-tue day-wed))
+             (streaks (org-atomic-stats--calculate-streaks habit-good done-dates)))
+        (should (= (plist-get streaks :current-streak) 3))
+        (should (= (plist-get streaks :longest-streak) 3)))
+      ;; 2. Test streaks for Bad Habit
+      (let* ((done-dates (list day-tue))
+             (streaks (org-atomic-stats--calculate-streaks habit-bad done-dates)))
+        (should (= (plist-get streaks :current-streak) 1))
+        (should (= (plist-get streaks :longest-streak) 1)))
+      ;; 3. Test rates calculation
+      (let* ((done-dates (list day-mon day-tue day-wed))
+             (rates (org-atomic-stats--calculate-rates habit-good done-dates 7)))
+        (should (= (plist-get rates :active-count) 5))
+        (should (= (plist-get rates :success-count) 3))
+        (should (= (plist-get rates :percentage) 60))))))
+
+(ert-deftest org-atomic-test-graph-percentage ()
+  "Test that consistency graph optionally appends completion percentage."
+  (let* ((day-fri (time-to-days (encode-time 0 0 0 26 6 2026)))
+         (habit (list "TestHabit" ".+1d" nil nil (list day-fri))))
+    (cl-letf (((symbol-function 'org-atomic-core-parse-habit)
+               (lambda (&optional _marker _txt)
+                 (org-atomic-core-habit-create
+                  :type "good"
+                  :days '(1 2 3 4 5))))
+              (org-atomic-graph-show-percentage t))
+      (let* ((starting (encode-time 0 0 0 26 6 2026))
+             (current (encode-time 0 0 0 30 6 2026))
+             (ending (encode-time 0 0 0 2 7 2026))
+             (graph (org-atomic-graph-build habit starting current ending)))
+        (should (string-match-p "33%" graph))))))
 
 (provide 'org-atomic-test)
 ;;; org-atomic-test.el ends here
