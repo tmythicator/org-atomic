@@ -38,77 +38,25 @@ than successful habit executions."
   :group 'org-atomic-core)
 
 
-(defun org-atomic-core-habit-create (&rest args)
-  "Create a new atomic habit plist with default values, overridden by ARGS."
-  (let ((defaults
-         (list
-          :id nil
-          :obvious nil
-          :attractive nil
-          :easy nil
-          :satisfying nil
-          :why nil
-          :invisible nil
-          :unattractive nil
-          :hard nil
-          :unsatisfying nil
-          :type "good"
-          :days nil
-          :next nil)))
-    (while args
-      (let ((key (pop args))
-            (val (pop args)))
-        (plist-put defaults key val)))
-    defaults))
-
-;; Plist accessors
-(defsubst org-atomic-core-habit-id (habit)
-  "Get :id from HABIT plist."
-  (plist-get habit :id))
-
-(defsubst org-atomic-core-habit-obvious (habit)
-  "Get :obvious from HABIT plist."
-  (plist-get habit :obvious))
-
-(defsubst org-atomic-core-habit-attractive (habit)
-  "Get :attractive from HABIT plist."
-  (plist-get habit :attractive))
-
-(defsubst org-atomic-core-habit-easy (habit)
-  "Get :easy from HABIT plist."
-  (plist-get habit :easy))
-
-(defsubst org-atomic-core-habit-satisfying (habit)
-  "Get :satisfying from HABIT plist."
-  (plist-get habit :satisfying))
-
-(defsubst org-atomic-core-habit-why (habit)
-  "Get :why from HABIT plist."
-  (plist-get habit :why))
-
-(defsubst org-atomic-core-habit-invisible (habit)
-  "Get :invisible from HABIT plist."
-  (plist-get habit :invisible))
-
-(defsubst org-atomic-core-habit-unattractive (habit)
-  "Get :unattractive from HABIT plist."
-  (plist-get habit :unattractive))
-
-(defsubst org-atomic-core-habit-hard (habit)
-  "Get :hard from HABIT plist."
-  (plist-get habit :hard))
-
-(defsubst org-atomic-core-habit-unsatisfying (habit)
-  "Get :unsatisfying from HABIT plist."
-  (plist-get habit :unsatisfying))
-
-(defsubst org-atomic-core-habit-type (habit)
-  "Get :type from HABIT plist."
-  (plist-get habit :type))
-
-(defsubst org-atomic-core-habit-days (habit)
-  "Get :days from HABIT plist."
-  (plist-get habit :days))
+(cl-defstruct
+ (org-atomic-habit
+  (:constructor org-atomic-core-habit-create)
+  (:conc-name org-atomic-core-habit-)
+  (:copier nil))
+ "Structure representing an atomic habit."
+ id
+ obvious
+ attractive
+ easy
+ satisfying
+ why
+ invisible
+ unattractive
+ hard
+ unsatisfying
+ (type "good")
+ days
+ next)
 
 (defconst org-atomic-core--property-mapping
   '(("ATOMIC_ID" . :id)
