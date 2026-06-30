@@ -237,5 +237,35 @@ VISITED is a list of already visited IDs to prevent infinite loops."
                                             (cons id-trimmed visited))
             "/" id-trimmed))))))))
 
+(defun org-atomic-core-habit-bad-p (habit)
+  "Return non-nil if HABIT is configured as a bad habit."
+  (let ((type (org-atomic-core-habit-type habit)))
+    (and type (string= (downcase (string-trim type)) "bad"))))
+
+(defun org-atomic-core-habit-success-p (habit done-p)
+  "Return non-nil if HABIT is successful given its completion status DONE-P."
+  (if (org-atomic-core-habit-bad-p habit)
+      (not done-p)
+    done-p))
+
+(defun org-atomic-core-habit-strategies (habit)
+  "Return an alist of active strategy labels and values for HABIT."
+  (let ((is-bad (org-atomic-core-habit-bad-p habit)))
+    (thread-last
+     (if is-bad
+         `(("Invisible" . ,(org-atomic-core-habit-invisible habit))
+           ("Unattractive"
+            .
+            ,(org-atomic-core-habit-unattractive habit))
+           ("Hard" . ,(org-atomic-core-habit-hard habit))
+           ("Unsatisfying"
+            .
+            ,(org-atomic-core-habit-unsatisfying habit)))
+       `(("Obvious" . ,(org-atomic-core-habit-obvious habit))
+         ("Attractive" . ,(org-atomic-core-habit-attractive habit))
+         ("Easy" . ,(org-atomic-core-habit-easy habit))
+         ("Satisfying" . ,(org-atomic-core-habit-satisfying habit))))
+     (cl-remove-if-not #'cdr))))
+
 (provide 'org-atomic-core)
 ;;; org-atomic-core.el ends here
