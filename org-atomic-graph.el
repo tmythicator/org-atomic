@@ -3,7 +3,7 @@
 ;; Copyright (C) 2026 Alexandr Timchenko
 ;; Author: Alexandr Timchenko <atimchenko92@gmail.com>
 ;; Assisted-by: Gemini:gemini-3.5-flash
-;; Version: 1.3.0
+;; Version: 1.3.1
 ;; Package-Requires: ((emacs "27.1") (org "9.3"))
 ;; URL: https://github.com/tmythicator/org-atomic
 ;; License: GPL-3.0-or-later
@@ -214,12 +214,9 @@ If PARSED is a non-nil habit plist, use it; otherwise parse the habit."
          (active-days
           (when habit-struct
             (org-atomic-core-habit-days habit-struct)))
-         (habit-type
-          (if habit-struct
-              (org-atomic-core-habit-type habit-struct)
-            "good"))
          (is-bad-habit
-          (string= (downcase (string-trim habit-type)) "bad"))
+          (and habit-struct
+               (org-atomic-core-habit-bad-p habit-struct)))
          (history nil))
     (let* ((future-days (- end-day now-day))
            (truncate-future (min 2 (max 0 future-days)))

@@ -3,7 +3,7 @@
 ;; Copyright (C) 2026 Alexandr Timchenko
 ;; Author: Alexandr Timchenko <atimchenko92@gmail.com>
 ;; Assisted-by: Gemini:gemini-3.5-flash
-;; Version: 1.3.0
+;; Version: 1.3.1
 ;; Package-Requires: ((emacs "27.1") (org "9.3"))
 ;; URL: https://github.com/tmythicator/org-atomic
 ;; License: GPL-3.0-or-later
@@ -65,19 +65,16 @@
   "Calculate current and longest streaks for HABIT-STRUCT using DONE-DATES."
   (let*
       ((active-days (org-atomic-core-habit-days habit-struct))
-       (type (org-atomic-core-habit-type habit-struct))
-       (is-bad-habit
-        (and type (string= (downcase (string-trim type)) "bad")))
        (today (org-today))
        ;; Start checking from today, or yesterday if today is not completed yet
        (start-eval-day
-        (if (and
-             (or (null active-days)
-                 (member
-                  (org-atomic-util--day-to-dow today) active-days))
-             (if is-bad-habit
-                 (member today done-dates) ; today is broken/failure for bad habit
-               (not (member today done-dates)))) ; today is not completed yet for good habit
+        (if (and (or (null active-days)
+                     (member
+                      (org-atomic-util--day-to-dow today)
+                      active-days))
+                 (not
+                  (org-atomic-core-habit-success-p
+                   habit-struct (member today done-dates))))
             (1- today)
           today))
        (current-streak 0)
@@ -97,9 +94,8 @@
         (when is-active
           (let* ((done-p (member d done-dates))
                  (success
-                  (if is-bad-habit
-                      (not done-p)
-                    done-p)))
+                  (org-atomic-core-habit-success-p
+                   habit-struct done-p)))
             (if success
                 (progn
                   (setq temp-streak (1+ temp-streak))
@@ -119,9 +115,6 @@
     (habit-struct done-dates range-days)
   "Calculate success rate for HABIT-STRUCT using DONE-DATES over RANGE-DAYS."
   (let* ((active-days (org-atomic-core-habit-days habit-struct))
-         (type (org-atomic-core-habit-type habit-struct))
-         (is-bad-habit
-          (and type (string= (downcase (string-trim type)) "bad")))
          (today (org-today))
          (start-day (- today (1- range-days)))
          (success-count 0)
@@ -135,9 +128,8 @@
           (setq active-count (1+ active-count))
           (let* ((done-p (member d done-dates))
                  (success
-                  (if is-bad-habit
-                      (not done-p)
-                    done-p)))
+                  (org-atomic-core-habit-success-p
+                   habit-struct done-p)))
             (when success
               (setq success-count (1+ success-count))))))
       (setq d (1+ d)))
@@ -189,9 +181,7 @@
            (org-atomic-util--clean-headline-text
             (org-get-heading t t t t))))
          (id (org-atomic-core-habit-id habit))
-         (type (org-atomic-core-habit-type habit))
-         (is-bad
-          (and type (string= (downcase (string-trim type)) "bad")))
+         (is-bad (org-atomic-core-habit-bad-p habit))
          (why (org-atomic-core-habit-why habit))
 
          ;; Stats
@@ -250,35 +240,7 @@
                (propertize "Why:" 'face 'org-atomic-stats-label-face)
                why))
      ;; Rules
-     (let ((rules nil))
-       (if is-bad
-           (let ((invisible (org-atomic-core-habit-invisible habit))
-                 (unattractive
-                  (org-atomic-core-habit-unattractive habit))
-                 (hard (org-atomic-core-habit-hard habit))
-                 (unsatisfying
-                  (org-atomic-core-habit-unsatisfying habit)))
-             (when invisible
-               (push (cons "Invisible" invisible) rules))
-             (when unattractive
-               (push (cons "Unattractive" unattractive) rules))
-             (when hard
-               (push (cons "Hard" hard) rules))
-             (when unsatisfying
-               (push (cons "Unsatisfying" unsatisfying) rules)))
-         (let ((obvious (org-atomic-core-habit-obvious habit))
-               (attractive (org-atomic-core-habit-attractive habit))
-               (easy (org-atomic-core-habit-easy habit))
-               (satisfying (org-atomic-core-habit-satisfying habit)))
-           (when obvious
-             (push (cons "Obvious" obvious) rules))
-           (when attractive
-             (push (cons "Attractive" attractive) rules))
-           (when easy
-             (push (cons "Easy" easy) rules))
-           (when satisfying
-             (push (cons "Satisfying" satisfying) rules))))
-       (setq rules (nreverse rules))
+     (let ((rules (org-atomic-core-habit-strategies habit)))
        (when rules
          (concat
           (mapconcat (lambda (rule)
@@ -300,9 +262,8 @@
          (bad-habits nil))
     ;; Separate good and bad habits
     (dolist (item habits)
-      (let* ((habit (nth 0 item))
-             (type (org-atomic-core-habit-type habit)))
-        (if (and type (string= (downcase (string-trim type)) "bad"))
+      (let* ((habit (nth 0 item)))
+        (if (org-atomic-core-habit-bad-p habit)
             (push item bad-habits)
           (push item good-habits))))
     (setq good-habits (nreverse good-habits))

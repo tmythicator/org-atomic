@@ -3,7 +3,7 @@
 ;; Copyright (C) 2026 Alexandr Timchenko
 ;; Author: Alexandr Timchenko <atimchenko92@gmail.com>
 ;; Assisted-by: Gemini:gemini-3.5-flash
-;; Version: 1.3.0
+;; Version: 1.3.1
 ;; Package-Requires: ((emacs "27.1") (org "9.3"))
 ;; URL: https://github.com/tmythicator/org-atomic
 ;; License: GPL-3.0-or-later
@@ -38,77 +38,25 @@ than successful habit executions."
   :group 'org-atomic-core)
 
 
-(defun org-atomic-core-habit-create (&rest args)
-  "Create a new atomic habit plist with default values, overridden by ARGS."
-  (let ((defaults
-         (list
-          :id nil
-          :obvious nil
-          :attractive nil
-          :easy nil
-          :satisfying nil
-          :why nil
-          :invisible nil
-          :unattractive nil
-          :hard nil
-          :unsatisfying nil
-          :type "good"
-          :days nil
-          :next nil)))
-    (while args
-      (let ((key (pop args))
-            (val (pop args)))
-        (plist-put defaults key val)))
-    defaults))
-
-;; Plist accessors
-(defsubst org-atomic-core-habit-id (habit)
-  "Get :id from HABIT plist."
-  (plist-get habit :id))
-
-(defsubst org-atomic-core-habit-obvious (habit)
-  "Get :obvious from HABIT plist."
-  (plist-get habit :obvious))
-
-(defsubst org-atomic-core-habit-attractive (habit)
-  "Get :attractive from HABIT plist."
-  (plist-get habit :attractive))
-
-(defsubst org-atomic-core-habit-easy (habit)
-  "Get :easy from HABIT plist."
-  (plist-get habit :easy))
-
-(defsubst org-atomic-core-habit-satisfying (habit)
-  "Get :satisfying from HABIT plist."
-  (plist-get habit :satisfying))
-
-(defsubst org-atomic-core-habit-why (habit)
-  "Get :why from HABIT plist."
-  (plist-get habit :why))
-
-(defsubst org-atomic-core-habit-invisible (habit)
-  "Get :invisible from HABIT plist."
-  (plist-get habit :invisible))
-
-(defsubst org-atomic-core-habit-unattractive (habit)
-  "Get :unattractive from HABIT plist."
-  (plist-get habit :unattractive))
-
-(defsubst org-atomic-core-habit-hard (habit)
-  "Get :hard from HABIT plist."
-  (plist-get habit :hard))
-
-(defsubst org-atomic-core-habit-unsatisfying (habit)
-  "Get :unsatisfying from HABIT plist."
-  (plist-get habit :unsatisfying))
-
-(defsubst org-atomic-core-habit-type (habit)
-  "Get :type from HABIT plist."
-  (plist-get habit :type))
-
-(defsubst org-atomic-core-habit-days (habit)
-  "Get :days from HABIT plist."
-  (plist-get habit :days))
+(cl-defstruct
+ (org-atomic-habit
+  (:constructor org-atomic-core-habit-create)
+  (:conc-name org-atomic-core-habit-)
+  (:copier nil))
+ "Structure representing an atomic habit."
+ id
+ obvious
+ attractive
+ easy
+ satisfying
+ why
+ invisible
+ unattractive
+ hard
+ unsatisfying
+ (type "good")
+ days
+ next)
 
 (defconst org-atomic-core--property-mapping
   '(("ATOMIC_ID" . :id)
@@ -288,6 +236,36 @@ VISITED is a list of already visited IDs to prevent infinite loops."
             (org-atomic-core--get-stack-key pred-marker
                                             (cons id-trimmed visited))
             "/" id-trimmed))))))))
+
+(defun org-atomic-core-habit-bad-p (habit)
+  "Return non-nil if HABIT is configured as a bad habit."
+  (let ((type (org-atomic-core-habit-type habit)))
+    (and type (string= (downcase (string-trim type)) "bad"))))
+
+(defun org-atomic-core-habit-success-p (habit done-p)
+  "Return non-nil if HABIT is successful given its completion status DONE-P."
+  (if (org-atomic-core-habit-bad-p habit)
+      (not done-p)
+    done-p))
+
+(defun org-atomic-core-habit-strategies (habit)
+  "Return an alist of active strategy labels and values for HABIT."
+  (let ((is-bad (org-atomic-core-habit-bad-p habit)))
+    (thread-last
+     (if is-bad
+         `(("Invisible" . ,(org-atomic-core-habit-invisible habit))
+           ("Unattractive"
+            .
+            ,(org-atomic-core-habit-unattractive habit))
+           ("Hard" . ,(org-atomic-core-habit-hard habit))
+           ("Unsatisfying"
+            .
+            ,(org-atomic-core-habit-unsatisfying habit)))
+       `(("Obvious" . ,(org-atomic-core-habit-obvious habit))
+         ("Attractive" . ,(org-atomic-core-habit-attractive habit))
+         ("Easy" . ,(org-atomic-core-habit-easy habit))
+         ("Satisfying" . ,(org-atomic-core-habit-satisfying habit))))
+     (cl-remove-if-not #'cdr))))
 
 (provide 'org-atomic-core)
 ;;; org-atomic-core.el ends here

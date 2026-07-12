@@ -3,7 +3,7 @@
 ;; Copyright (C) 2026 Alexandr Timchenko
 ;; Author: Alexandr Timchenko <atimchenko92@gmail.com>
 ;; Assisted-by: Gemini:gemini-3.5-flash
-;; Version: 1.3.0
+;; Version: 1.3.1
 ;; Package-Requires: ((emacs "27.1") (org "9.3"))
 ;; URL: https://github.com/tmythicator/org-atomic
 ;; License: GPL-3.0-or-later
@@ -63,50 +63,25 @@
   (let* ((habit
           (or parsed-habit (org-atomic-core-parse-habit nil txt))))
     (when habit
-      (let* ((type (org-atomic-core-habit-type habit))
-             (is-bad
-              (and type
-                   (string= (downcase (string-trim type)) "bad")))
+      (let* ((is-bad (org-atomic-core-habit-bad-p habit))
              (why (org-atomic-core-habit-why habit))
-             (obvious (org-atomic-core-habit-obvious habit))
-             (invisible (org-atomic-core-habit-invisible habit))
-             (attractive (org-atomic-core-habit-attractive habit))
-             (unattractive (org-atomic-core-habit-unattractive habit))
-             (easy (org-atomic-core-habit-easy habit))
-             (hard (org-atomic-core-habit-hard habit))
-             (satisfying (org-atomic-core-habit-satisfying habit))
-             (unsatisfying (org-atomic-core-habit-unsatisfying habit))
+             (strategies (org-atomic-core-habit-strategies habit))
+             (strategy-lines
+              (mapcar
+               (lambda (s)
+                 (format "Make It %s: %s" (car s) (cdr s)))
+               strategies))
              (lines
               (thread-last
-               (list
-                (format "Type: %s"
-                        (if is-bad
-                            "Bad Habit"
-                          "Good Habit"))
-                (when why
-                  (format "Why: %s" why))
-                (if is-bad
-                    (when invisible
-                      (format "Make It Invisible: %s" invisible))
-                  (when obvious
-                    (format "Make It Obvious: %s" obvious)))
-                (if is-bad
-                    (when unattractive
-                      (format "Make It Unattractive: %s"
-                              unattractive))
-                  (when attractive
-                    (format "Make It Attractive: %s" attractive)))
-                (if is-bad
-                    (when hard
-                      (format "Make It Hard: %s" hard))
-                  (when easy
-                    (format "Make It Easy: %s" easy)))
-                (if is-bad
-                    (when unsatisfying
-                      (format "Make It Unsatisfying: %s"
-                              unsatisfying))
-                  (when satisfying
-                    (format "Make It Satisfying: %s" satisfying))))
+               (append
+                (list
+                 (format "Type: %s"
+                         (if is-bad
+                             "Bad Habit"
+                           "Good Habit"))
+                 (when why
+                   (format "Why: %s" why)))
+                strategy-lines)
                (delq nil))))
         (when (> (length lines) 1)
           (string-join lines "\n"))))))
