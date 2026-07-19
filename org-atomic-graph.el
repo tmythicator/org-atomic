@@ -194,6 +194,28 @@ CANCELLED or other non-DONE states."
                (push day dates)))))
        (nreverse dates)))))
 
+(defun org-atomic-graph--determine-day-status
+    (d now-day done-p active-days is-bad-habit)
+  "Pure function: determine the status symbol for day D.
+Compares D against NOW-DAY. Uses DONE-P to check completion, ACTIVE-DAYS to check if
+it's a scheduled day, and IS-BAD-HABIT to determine the habit type."
+  (let* ((weekday (org-atomic-util--day-to-dow d))
+         (is-active-day
+          (or (null active-days) (member weekday active-days))))
+    (cond
+     ((> d now-day)
+      'future)
+     ((not is-active-day)
+      'skipped)
+     ((not is-bad-habit)
+      (if done-p
+          'good-done
+        'good-missed))
+     (is-bad-habit
+      (if done-p
+          'bad-done
+        'bad-avoided)))))
+
 (defun org-atomic-graph-build
     (habit starting current ending &optional parsed)
   "Build an atomic consistency graph for HABIT from STARTING to ENDING.
@@ -216,34 +238,24 @@ If PARSED is a non-nil habit plist, use it; otherwise parse the habit."
             (org-atomic-core-habit-days habit-struct)))
          (is-bad-habit
           (and habit-struct
-               (org-atomic-core-habit-bad-p habit-struct)))
-         (history nil))
+               (org-atomic-core-habit-bad-p habit-struct))))
     (let* ((future-days (- end-day now-day))
            (truncate-future (min 2 (max 0 future-days)))
            (truncate-past (- 2 truncate-future))
            (loop-start (+ start-day truncate-past))
-           (d loop-start))
-      (while (< d (+ loop-start body-len))
-        (let* ((done-p (member d done-dates))
-               (weekday (org-atomic-util--day-to-dow d))
-               (is-active-day
-                (or (null active-days) (member weekday active-days))))
-          (cond
-           ((> d now-day)
-            (push 'future history))
-           ((not is-active-day)
-            (push 'skipped history))
-           ((not is-bad-habit)
-            (if done-p
-                (push 'good-done history)
-              (push 'good-missed history)))
-           (is-bad-habit
-            (if done-p
-                (push 'bad-done history)
-              (push 'bad-avoided history)))))
-        (setq d (1+ d))))
-    (org-atomic-graph-draw (nreverse history)
-                           org-atomic-graph-show-percentage)))
+           (loop-end (1- (+ loop-start body-len)))
+           (history
+            (seq-map
+             (lambda (d)
+               (org-atomic-graph--determine-day-status
+                d
+                now-day
+                (member d done-dates)
+                active-days
+                is-bad-habit))
+             (number-sequence loop-start loop-end))))
+      (org-atomic-graph-draw history
+                             org-atomic-graph-show-percentage))))
 
 (provide 'org-atomic-graph)
 ;;; org-atomic-graph.el ends here
