@@ -74,6 +74,17 @@ than successful habit executions."
     ("ATOMIC_UNSATISFYING" . :unsatisfying))
   "Mapping from Org properties to habit plist keys.")
 
+(defun org-atomic-core--parse-property-mapping (mapping props)
+  "Pure function: parse a single MAPPING against PROPS alist."
+  (pcase-let* ((`(,prop-name . ,slot) mapping)
+               (val (cdr (assoc prop-name props))))
+    (when (and val (not (string-empty-p (string-trim val))))
+      (list
+       slot
+       (if (eq slot :days)
+           (org-atomic-util--parse-days val)
+         (string-trim val))))))
+
 (defun org-atomic-core-parse-habit (&optional marker txt)
   "Parse all ATOMIC_* properties at MARKER or in TXT.
 Returns an `org-atomic-habit' plist if the entry is an atomic habit."
@@ -85,15 +96,8 @@ Returns an `org-atomic-habit' plist if the entry is an atomic habit."
             (args
              (seq-mapcat
               (lambda (mapping)
-                (pcase-let* ((`(,prop-name . ,slot) mapping)
-                             (val (cdr (assoc prop-name props))))
-                  (when (and val
-                             (not (string-empty-p (string-trim val))))
-                    (list
-                     slot
-                     (if (eq slot :days)
-                         (org-atomic-util--parse-days val)
-                       val)))))
+                (org-atomic-core--parse-property-mapping
+                 mapping props))
               org-atomic-core--property-mapping)))
        (when args
          (apply #'org-atomic-core-habit-create
@@ -124,7 +128,7 @@ Returns an `org-atomic-habit' plist if the entry is an atomic habit."
 
 (defun org-atomic-core--scan-buffer-for-property (property value)
   "Scan the current widened buffer for a heading where PROPERTY matches VALUE.
-Returns the point-marker if found, otherwise nil."
+Returns the `point-marker' if found, otherwise nil."
   (save-restriction
     (widen)
     (save-excursion
