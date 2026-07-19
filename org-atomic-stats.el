@@ -61,55 +61,58 @@
   "Face for labels in the dashboard cards."
   :group 'org-atomic-stats)
 
+(defun org-atomic-stats--step-streak (acc day habit-struct done-dates)
+  "Pure function: computes the next streak state for a given DAY.
+ACC is a tuple of (current longest temp broken)."
+  (let ((success-p
+         (org-atomic-core-habit-success-p
+          habit-struct (member day done-dates))))
+    (pcase-let* ((`(,curr ,long ,temp ,broken) acc))
+      (if success-p
+          (list
+           (if broken
+               curr
+             (1+ curr))
+           (max long (1+ temp)) (1+ temp) broken)
+        (list curr long 0 t)))))
+
 (defun org-atomic-stats--calculate-streaks (habit-struct done-dates)
   "Calculate current and longest streaks for HABIT-STRUCT using DONE-DATES."
   (let*
       ((active-days (org-atomic-core-habit-days habit-struct))
        (today (org-today))
-       ;; Start checking from today, or yesterday if today is not completed yet
+       (today-active-p
+        (or (null active-days)
+            (member (org-atomic-util--day-to-dow today) active-days)))
+       (today-success-p
+        (org-atomic-core-habit-success-p
+         habit-struct (member today done-dates)))
+
+       ;; If today is an active day but not yet successful, start evaluating from yesterday
        (start-eval-day
-        (if (and (or (null active-days)
-                     (member
-                      (org-atomic-util--day-to-dow today)
-                      active-days))
-                 (not
-                  (org-atomic-core-habit-success-p
-                   habit-struct (member today done-dates))))
+        (if (and today-active-p (not today-success-p))
             (1- today)
           today))
-       (current-streak 0)
-       (longest-streak 0)
-       (temp-streak 0)
-       ;; Scan back up to 365 days or the oldest done date
        (min-day
         (if done-dates
             (apply #'min done-dates)
           (- today 365)))
-       (d start-eval-day)
-       (streak-broken nil))
-    (while (>= d min-day)
-      (let* ((weekday (org-atomic-util--day-to-dow d))
-             (is-active
-              (or (null active-days) (member weekday active-days))))
-        (when is-active
-          (let* ((done-p (member d done-dates))
-                 (success
-                  (org-atomic-core-habit-success-p
-                   habit-struct done-p)))
-            (if success
-                (progn
-                  (setq temp-streak (1+ temp-streak))
-                  (setq longest-streak
-                        (max longest-streak temp-streak))
-                  (unless streak-broken
-                    (setq current-streak (1+ current-streak))))
-              ;; Failure!
-              (setq temp-streak 0)
-              (setq streak-broken t)))))
-      (setq d (1- d)))
+       (days-seq
+        (seq-filter
+         (lambda (d)
+           (let ((weekday (org-atomic-util--day-to-dow d)))
+             (or (null active-days) (member weekday active-days))))
+         (number-sequence start-eval-day min-day -1)))
+       (result
+        (seq-reduce
+         (lambda (acc d)
+           (org-atomic-stats--step-streak
+            acc d habit-struct done-dates))
+         days-seq
+         (list 0 0 0 nil)))) ;; Initial state: (current longest temp broken)
     (list
-     :current-streak current-streak
-     :longest-streak longest-streak)))
+     :current-streak (nth 0 result)
+     :longest-streak (nth 1 result))))
 
 (defun org-atomic-stats--calculate-rates
     (habit-struct done-dates range-days)
@@ -117,29 +120,27 @@
   (let* ((active-days (org-atomic-core-habit-days habit-struct))
          (today (org-today))
          (start-day (- today (1- range-days)))
-         (success-count 0)
-         (active-count 0)
-         (d start-day))
-    (while (<= d today)
-      (let* ((weekday (org-atomic-util--day-to-dow d))
-             (is-active
-              (or (null active-days) (member weekday active-days))))
-        (when is-active
-          (setq active-count (1+ active-count))
-          (let* ((done-p (member d done-dates))
-                 (success
-                  (org-atomic-core-habit-success-p
-                   habit-struct done-p)))
-            (when success
-              (setq success-count (1+ success-count))))))
-      (setq d (1+ d)))
-    (let ((pct
-           (org-atomic-util-calculate-percentage
-            success-count active-count)))
-      (list
-       :success-count success-count
-       :active-count active-count
-       :percentage pct))))
+         (days-seq (number-sequence start-day today))
+         (active-days-seq
+          (seq-filter
+           (lambda (d)
+             (let ((weekday (org-atomic-util--day-to-dow d)))
+               (or (null active-days) (member weekday active-days))))
+           days-seq))
+         (active-count (length active-days-seq))
+         (success-count
+          (seq-count
+           (lambda (d)
+             (org-atomic-core-habit-success-p
+              habit-struct (member d done-dates)))
+           active-days-seq))
+         (pct
+          (org-atomic-util-calculate-percentage
+           success-count active-count)))
+    (list
+     :success-count success-count
+     :active-count active-count
+     :percentage pct)))
 
 (defun org-atomic-stats--draw-bar (percentage width)
   "Draw a Unicode progress bar of WIDTH chars representing PERCENTAGE."
@@ -153,25 +154,17 @@
 
 (defun org-atomic-stats--collect-habits ()
   "Scan all `org-agenda-files' and collect parsed habits with their markers."
-  (let ((habits nil))
-    (dolist (file (org-agenda-files))
-      (when (file-exists-p file)
-        (with-current-buffer (find-file-noselect file)
-          (save-excursion
-            (save-restriction
-              (widen)
-              (goto-char (point-min))
-              (while (re-search-forward
-                      org-atomic-util-headline-regexp
-                      nil t)
-                (let ((habit (org-atomic-core-parse-habit)))
-                  (when habit
-                    (push (list
-                           habit (point-marker)
-                           (org-atomic-util--clean-headline-text
-                            (org-get-heading t t t t)))
-                          habits)))))))))
-    (nreverse habits)))
+  (delq
+   nil
+   (org-map-entries
+    (lambda ()
+      (let ((habit (org-atomic-core-parse-habit)))
+        (when habit
+          (list
+           habit (point-marker)
+           (org-atomic-util--clean-headline-text
+            (org-get-heading t t t t))))))
+    nil 'agenda)))
 
 (defun org-atomic-stats--format-habit-card (habit marker range-days)
   "Format a single HABIT card at MARKER over RANGE-DAYS."
@@ -258,64 +251,54 @@
   "Render the Org-Atomic stats page."
   (let* ((habits (org-atomic-stats--collect-habits))
          (range org-atomic-stats-default-range)
-         (good-habits nil)
-         (bad-habits nil))
-    ;; Separate good and bad habits
-    (dolist (item habits)
-      (let* ((habit (nth 0 item)))
-        (if (org-atomic-core-habit-bad-p habit)
-            (push item bad-habits)
-          (push item good-habits))))
-    (setq good-habits (nreverse good-habits))
-    (setq bad-habits (nreverse bad-habits))
-
-    ;; Print Title Banner
-    (insert "\n")
-    (insert
-     (propertize "  ORG-ATOMIC HABITS STATS\n"
-                 'face
-                 'org-atomic-stats-header-face))
-
-    (insert "\n")
-    ;; Display overall stats summary
-    (let* ((total-habits (length habits))
-           (total-good (length good-habits))
-           (total-bad (length bad-habits)))
-      (insert
-       (propertize "  Summary:\n"
-                   'face
-                   'org-atomic-stats-subheader-face))
-      (insert
-       (format "    Total Habits: %d  (Good: %d, Bad: %d)\n"
-               total-habits
-               total-good
-               total-bad))
-      (insert (format "    Tracking Range: last %d days\n\n" range)))
-
-    ;; Print Good Habits Section
-    (when good-habits
-      (insert
-       (propertize "  GOOD HABITS\n"
-                   'face
-                   'org-atomic-stats-subheader-face))
-      (insert "\n")
-      (dolist (item good-habits)
-        (insert
-         (org-atomic-stats--format-habit-card
-          (nth 0 item) (nth 1 item) range))))
-
-    ;; Print Bad Habits Section
-    (when bad-habits
-      (insert
-       (propertize "  BAD HABITS\n"
-                   'face
-                   'org-atomic-stats-subheader-face))
-      (insert "\n")
-      (dolist (item bad-habits)
-        (insert
-         (org-atomic-stats--format-habit-card
-          (nth 0 item) (nth 1 item) range))))
-
+         (grouped
+          (seq-group-by
+           (lambda (item)
+             (org-atomic-core-habit-bad-p (car item)))
+           habits))
+         (bad-habits (alist-get t grouped))
+         (good-habits (alist-get nil grouped))
+         (total-habits (length habits))
+         (total-good (length good-habits))
+         (total-bad (length bad-habits))
+         (banner
+          (concat
+           "\n"
+           (propertize "  ORG-ATOMIC HABITS STATS\n\n"
+                       'face
+                       'org-atomic-stats-header-face)))
+         (summary
+          (concat
+           (propertize "  Summary:\n"
+                       'face 'org-atomic-stats-subheader-face)
+           (format "    Total Habits: %d  (Good: %d, Bad: %d)\n"
+                   total-habits total-good total-bad)
+           (format "    Tracking Range: last %d days\n\n" range)))
+         (good-section
+          (when good-habits
+            (concat
+             (propertize "  GOOD HABITS\n\n"
+                         'face
+                         'org-atomic-stats-subheader-face)
+             (string-join (seq-map
+                           (lambda (item)
+                             (org-atomic-stats--format-habit-card
+                              (nth 0 item) (nth 1 item) range))
+                           good-habits)
+                          ""))))
+         (bad-section
+          (when bad-habits
+            (concat
+             (propertize "  BAD HABITS\n\n"
+                         'face
+                         'org-atomic-stats-subheader-face)
+             (string-join (seq-map
+                           (lambda (item)
+                             (org-atomic-stats--format-habit-card
+                              (nth 0 item) (nth 1 item) range))
+                           bad-habits)
+                          "")))))
+    (insert (concat banner summary good-section bad-section))
     (goto-char (point-min))))
 
 (defun org-atomic-stats-refresh ()
