@@ -17,6 +17,7 @@
 (require 'subr-x)
 (require 'calendar)
 (require 'org)
+(require 'seq)
 (require 'org-atomic-util)
 
 (defgroup org-atomic-core nil

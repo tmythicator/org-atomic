@@ -14,6 +14,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'seq)
 (require 'org-atomic-core)
 (require 'org-atomic-util)
 (require 'org-habit)
@@ -197,8 +198,9 @@ CANCELLED or other non-DONE states."
 (defun org-atomic-graph--determine-day-status
     (d now-day done-p active-days is-bad-habit)
   "Pure function: determine the status symbol for day D.
-Compares D against NOW-DAY. Uses DONE-P to check completion, ACTIVE-DAYS to check if
-it's a scheduled day, and IS-BAD-HABIT to determine the habit type."
+Compares D against NOW-DAY.  Uses DONE-P to check completion,
+ACTIVE-DAYS to check if it's a scheduled day, and IS-BAD-HABIT
+to determine the habit type."
   (let* ((weekday (org-atomic-util--day-to-dow d))
          (is-active-day
           (or (null active-days) (member weekday active-days))))

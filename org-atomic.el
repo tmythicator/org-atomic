@@ -16,6 +16,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'seq)
 (require 'org-atomic-core)
 (require 'org-atomic-util)
 (require 'subr-x)

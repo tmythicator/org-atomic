@@ -19,6 +19,7 @@
 (require 'calendar)
 (require 'org)
 (require 'org-agenda)
+(require 'seq)
 (require 'org-atomic-core)
 (require 'org-atomic-util)
 (require 'org-atomic-graph)
