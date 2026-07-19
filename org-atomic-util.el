@@ -143,17 +143,18 @@ and fallback to a regex search backward if that fails."
 (defmacro org-atomic-util-with-heading-at-marker (marker &rest body)
   "Execute BODY with MARKER's buffer current, widened, and point at its heading."
   (declare (indent 1) (debug t))
-  (let ((m (make-symbol "marker")))
-    `(let ((,m ,marker))
-       (when (and ,m (marker-buffer ,m))
-         (with-current-buffer (marker-buffer ,m)
-           (save-excursion
-             (save-restriction
-               (widen)
+  (let ((m (make-symbol "marker"))
+        (buf (make-symbol "buf")))
+    `(let* ((,m ,marker)
+            (,buf (and ,m (marker-buffer ,m))))
+       (when ,buf
+         (with-current-buffer ,buf
+           (save-restriction
+             (widen)
+             (save-excursion
                (goto-char ,m)
                (org-atomic-util--goto-heading-at-point)
                ,@body)))))))
-
 
 ;;; ============================================================================
 ;;; Day & Time Parsing
