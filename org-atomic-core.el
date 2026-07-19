@@ -17,6 +17,7 @@
 (require 'subr-x)
 (require 'calendar)
 (require 'org)
+(require 'seq)
 (require 'org-atomic-util)
 
 (defgroup org-atomic-core nil
@@ -74,33 +75,36 @@ than successful habit executions."
     ("ATOMIC_UNSATISFYING" . :unsatisfying))
   "Mapping from Org properties to habit plist keys.")
 
+(defun org-atomic-core--parse-property-mapping (mapping props)
+  "Pure function: parse a single MAPPING against PROPS alist."
+  (pcase-let* ((`(,prop-name . ,slot) mapping)
+               (val (cdr (assoc prop-name props))))
+    (when (and val (not (string-empty-p (string-trim val))))
+      (list
+       slot
+       (if (eq slot :days)
+           (org-atomic-util--parse-days val)
+         (string-trim val))))))
+
 (defun org-atomic-core-parse-habit (&optional marker txt)
   "Parse all ATOMIC_* properties at MARKER or in TXT.
 Returns an `org-atomic-habit' plist if the entry is an atomic habit."
-  (let ((resolved-marker
-         (org-atomic-util--find-marker (or marker txt))))
+  (when-let* ((resolved-marker
+               (org-atomic-util--find-marker (or marker txt))))
     (org-atomic-util-with-heading-at-marker
      resolved-marker
      (let* ((props (org-entry-properties (point)))
-            (habit-args nil)
-            (has-any nil))
-       (dolist (map org-atomic-core--property-mapping)
-         (let* ((prop-name (car map))
-                (plist-key (cdr map))
-                (val (cdr (assoc prop-name props))))
-           (when val
-             (setq has-any t)
-             (cond
-              ((eq plist-key :days)
-               (setq val (org-atomic-util--parse-days val)))
-              ((and (eq plist-key :type)
-                    (string-empty-p (string-trim val)))
-               (setq val "good")))
-             (setq habit-args (plist-put habit-args plist-key val)))))
-       (when has-any
-         (unless (plist-get habit-args :type)
-           (setq habit-args (plist-put habit-args :type "good")))
-         (apply #'org-atomic-core-habit-create habit-args))))))
+            (args
+             (seq-mapcat
+              (lambda (mapping)
+                (org-atomic-core--parse-property-mapping
+                 mapping props))
+              org-atomic-core--property-mapping)))
+       (when args
+         (apply #'org-atomic-core-habit-create
+                (if (plist-member args :type)
+                    args
+                  (append '(:type "good") args))))))))
 
 ;;; Caches
 
@@ -123,46 +127,47 @@ Returns an `org-atomic-habit' plist if the entry is an atomic habit."
 
 ;;; Heading Search & Hierarchy Utilities
 
+(defun org-atomic-core--scan-buffer-for-property (property value)
+  "Scan the current widened buffer for a heading where PROPERTY matches VALUE.
+Returns the `point-marker' if found, otherwise nil."
+  (save-restriction
+    (widen)
+    (save-excursion
+      (goto-char (point-min))
+      (catch 'found
+        (while (re-search-forward org-atomic-util-headline-regexp
+                                  nil
+                                  t)
+          (let ((val (org-entry-get (point) property)))
+            (when (and val (string= (string-trim val) value))
+              (throw 'found (point-marker)))))))))
+
 (defun org-atomic-core--find-heading-by-property
     (property value &optional cache)
   "Find the marker of the heading where PROPERTY equals VALUE.
 Uses CACHE (a hash table) if provided."
-  (if (and cache
-           (let ((cached (gethash value cache 'not-found)))
-             (not (eq cached 'not-found))))
+  (if (and cache (gethash value cache))
       (gethash value cache)
-    (let ((found-pos nil)
-          (buffers
-           (cons
-            (current-buffer)
-            (delq
+    (let* ((value-trimmed (string-trim value))
+           (buffers
+            (cons
              (current-buffer)
              (delq
-              nil
-              (mapcar #'find-buffer-visiting org-agenda-files))))))
-      (setq found-pos
+              (current-buffer)
+              (delq
+               nil
+               (mapcar #'find-buffer-visiting org-agenda-files)))))
+           (found-marker
             (cl-some
              (lambda (buf)
                (when (buffer-live-p buf)
                  (with-current-buffer buf
-                   (save-excursion
-                     (save-restriction
-                       (widen)
-                       (goto-char (point-min))
-                       (while (and (not found-pos)
-                                   (re-search-forward
-                                    org-atomic-util-headline-regexp
-                                    nil t))
-                         (let ((val (org-entry-get (point) property)))
-                           (if (and val
-                                    (string= (string-trim val) value))
-                               (setq found-pos (point-marker))
-                             (forward-line 1))))
-                       found-pos)))))
-             buffers))
-      (when cache
-        (puthash value found-pos cache))
-      found-pos)))
+                   (org-atomic-core--scan-buffer-for-property
+                    property value-trimmed))))
+             buffers)))
+      (when (and cache found-marker)
+        (puthash value found-marker cache))
+      found-marker)))
 
 (defun org-atomic-core--find-habit-by-id (id)
   "Find the marker of the habit with ATOMIC_ID equal to ID."
@@ -183,22 +188,20 @@ Uses CACHE (a hash table) if provided."
             (format "%s:%d"
                     (buffer-name (marker-buffer marker))
                     (marker-position marker)))
-           (cached
-            (gethash cache-key org-atomic-core--time-cache
-                     'not-found)))
-      (if (not (eq cached 'not-found))
-          cached
-        (let ((time-val
-               (org-atomic-util-with-heading-at-marker
-                marker
-                (let ((headline (org-get-heading t t t t))
-                      (scheduled (org-entry-get (point) "SCHEDULED")))
-                  (or (org-atomic-util--parse-time-str-to-int
-                       headline)
-                      (org-atomic-util--parse-time-str-to-int
-                       scheduled))))))
-          (puthash cache-key time-val org-atomic-core--time-cache)
-          time-val)))))
+           (cached (gethash cache-key org-atomic-core--time-cache)))
+      (or cached
+          (let ((time-val
+                 (org-atomic-util-with-heading-at-marker
+                  marker
+                  (let ((headline (org-get-heading t t t t))
+                        (scheduled
+                         (org-entry-get (point) "SCHEDULED")))
+                    (or (org-atomic-util--parse-time-str-to-int
+                         headline)
+                        (org-atomic-util--parse-time-str-to-int
+                         scheduled))))))
+            (puthash cache-key time-val org-atomic-core--time-cache)
+            time-val)))))
 
 (defun org-atomic-core--get-effective-time (item key marker)
   "Get the effective time of day for ITEM at MARKER with stack KEY."

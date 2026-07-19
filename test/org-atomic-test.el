@@ -495,5 +495,61 @@
              (graph (org-atomic-graph-build habit starting current ending)))
         (should (string-match-p "33%" graph))))))
 
+(ert-deftest org-atomic-test-step-streak ()
+  "Test the pure state machine logic for calculating streaks."
+  (let* ((habit-good (org-atomic-core-habit-create :id "TestGood" :type "good"))
+         (done-dates '(100 101 102)))
+    ;; Current state: (current longest temp broken)
+    ;; Test Day 102 (Success). Previous state was all 0s.
+    (should (equal (org-atomic-stats--step-streak '(0 0 0 nil) 102 habit-good done-dates)
+                   '(1 1 1 nil)))
+    ;; Test Day 101 (Success). We feed the result of previous step.
+    (should (equal (org-atomic-stats--step-streak '(1 1 1 nil) 101 habit-good done-dates)
+                   '(2 2 2 nil)))
+    ;; Test Day 99 (Missed). We feed the result of previous step.
+    (should (equal (org-atomic-stats--step-streak '(2 2 2 nil) 99 habit-good done-dates)
+                   '(2 2 0 t)))
+    ;; Test Day 98 (Success but broken). The temp increases, but current doesn't.
+    (let ((done-dates-with-gap '(98 100 101 102)))
+      (should (equal (org-atomic-stats--step-streak '(2 2 0 t) 98 habit-good done-dates-with-gap)
+                     '(2 2 1 t))))))
+
+(ert-deftest org-atomic-test-determine-day-status ()
+  "Test pure logic for determining consistency graph day status."
+  (let ((now 100))
+    ;; 1. Future day
+    (should (eq (org-atomic-graph--determine-day-status 105 now nil nil nil) 'future))
+    ;; 2. Inactive day
+    (cl-letf* (((symbol-function 'org-atomic-util--day-to-dow) (lambda (_) 7))) ; pretend it's sunday
+      (should (eq (org-atomic-graph--determine-day-status 99 now t '(1 2 3) nil) 'skipped)))
+    ;; 3. Good Habit - Done
+    (cl-letf* (((symbol-function 'org-atomic-util--day-to-dow) (lambda (_) 1))) ; pretend it's monday
+      (should (eq (org-atomic-graph--determine-day-status 99 now t '(1 2 3) nil) 'good-done)))
+    ;; 4. Good Habit - Missed
+    (cl-letf* (((symbol-function 'org-atomic-util--day-to-dow) (lambda (_) 1)))
+      (should (eq (org-atomic-graph--determine-day-status 99 now nil '(1 2 3) nil) 'good-missed)))
+    ;; 5. Bad Habit - Avoided (Good)
+    (cl-letf* (((symbol-function 'org-atomic-util--day-to-dow) (lambda (_) 1)))
+      (should (eq (org-atomic-graph--determine-day-status 99 now nil '(1 2 3) t) 'bad-avoided)))
+    ;; 6. Bad Habit - Done (Bad)
+    (cl-letf* (((symbol-function 'org-atomic-util--day-to-dow) (lambda (_) 1)))
+      (should (eq (org-atomic-graph--determine-day-status 99 now t '(1 2 3) t) 'bad-done)))))
+
+(ert-deftest org-atomic-test-parse-property-mapping ()
+  "Test pure logic for parsing property mappings."
+  (let ((props '(("ATOMIC_ID" . "  my-habit  ")
+                 ("ATOMIC_DAYS" . " mon, tue ")
+                 ("ATOMIC_WHY" . ""))))
+    ;; 1. Standard string mapping (should trim)
+    (should (equal (org-atomic-core--parse-property-mapping '("ATOMIC_ID" . :id) props)
+                   '(:id "my-habit")))
+    ;; 2. Days mapping (should parse)
+    (should (equal (org-atomic-core--parse-property-mapping '("ATOMIC_DAYS" . :days) props)
+                   '(:days (1 2))))
+    ;; 3. Empty string mapping (should return nil)
+    (should (null (org-atomic-core--parse-property-mapping '("ATOMIC_WHY" . :why) props)))
+    ;; 4. Missing mapping (should return nil)
+    (should (null (org-atomic-core--parse-property-mapping '("ATOMIC_NEXT" . :next) props)))))
+
 (provide 'org-atomic-test)
 ;;; org-atomic-test.el ends here

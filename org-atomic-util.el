@@ -66,6 +66,14 @@ Examples: <-08:30> or <- 8:30>.")
 (defconst org-atomic-util-headline-regexp "^\\*+ "
   "Regexp matching Org headline stars.")
 
+(defconst org-atomic-util-weekday-names
+  '("mon" "tue" "wed" "thu" "fri" "sat" "sun")
+  "List of expected weekday abbreviations, starting from Monday.")
+
+(defconst org-atomic-util-marker-properties
+  '(org-marker org-hd-marker)
+  "Text properties used by Org-mode to store markers.")
+
 
 ;;; ============================================================================
 ;;; Marker Extraction
@@ -74,38 +82,34 @@ Examples: <-08:30> or <- 8:30>.")
 (defun org-atomic-util--get-marker-from-string (str)
   "Extract an Org marker from the text properties of STR."
   (when (stringp str)
-    (let ((pos
-           (or (text-property-not-all 0 (length str) 'org-marker nil
-                                      str)
-               (text-property-not-all
-                0 (length str) 'org-hd-marker nil
-                str))))
-      (when pos
-        (or (get-text-property pos 'org-marker str)
-            (get-text-property pos 'org-hd-marker str))))))
+    (seq-some
+     (lambda (prop)
+       (let ((pos
+              (text-property-not-all 0 (length str) prop nil str)))
+         (when pos
+           (get-text-property pos prop str))))
+     org-atomic-util-marker-properties)))
 
 (defun org-atomic-util--get-marker-from-context ()
   "Extract an Org marker from the current buffer context.
 Checks text properties at point, then on the current line, and finally
 falls back to `point-marker' if at an Org heading."
-  (or (get-text-property (point) 'org-marker)
-      (get-text-property (point) 'org-hd-marker)
-      (let ((pos
-             (or (text-property-not-all
-                  (line-beginning-position)
-                  (line-end-position)
-                  'org-marker
-                  nil)
-                 (text-property-not-all
-                  (line-beginning-position)
-                  (line-end-position)
-                  'org-hd-marker
-                  nil))))
-        (if pos
-            (or (get-text-property pos 'org-marker)
-                (get-text-property pos 'org-hd-marker))
-          (when (and (derived-mode-p 'org-mode) (org-at-heading-p))
-            (point-marker))))))
+  (or (seq-some
+       (lambda (prop) (get-text-property (point) prop))
+       org-atomic-util-marker-properties)
+      (seq-some
+       (lambda (prop)
+         (let ((pos
+                (text-property-not-all
+                 (line-beginning-position)
+                 (line-end-position)
+                 prop
+                 nil)))
+           (when pos
+             (get-text-property pos prop))))
+       org-atomic-util-marker-properties)
+      (when (and (derived-mode-p 'org-mode) (org-at-heading-p))
+        (point-marker))))
 
 (defun org-atomic-util--find-marker (&optional obj)
   "Find an Org marker from OBJ (string, marker, or nil).
@@ -143,17 +147,18 @@ and fallback to a regex search backward if that fails."
 (defmacro org-atomic-util-with-heading-at-marker (marker &rest body)
   "Execute BODY with MARKER's buffer current, widened, and point at its heading."
   (declare (indent 1) (debug t))
-  (let ((m (make-symbol "marker")))
-    `(let ((,m ,marker))
-       (when (and ,m (marker-buffer ,m))
-         (with-current-buffer (marker-buffer ,m)
-           (save-excursion
-             (save-restriction
-               (widen)
+  (let ((m (make-symbol "marker"))
+        (buf (make-symbol "buf")))
+    `(let* ((,m ,marker)
+            (,buf (and ,m (marker-buffer ,m))))
+       (when ,buf
+         (with-current-buffer ,buf
+           (save-restriction
+             (widen)
+             (save-excursion
                (goto-char ,m)
                (org-atomic-util--goto-heading-at-point)
                ,@body)))))))
-
 
 ;;; ============================================================================
 ;;; Day & Time Parsing
@@ -189,7 +194,7 @@ comma/space separated day numbers, or names (e.g. \"mon,tue\" or \"Monday\")."
                 (let ((day-idx
                        (cl-position
                         (substring tok 0 (min 3 (length tok)))
-                        '("mon" "tue" "wed" "thu" "fri" "sat" "sun")
+                        org-atomic-util-weekday-names
                         :test #'string=)))
                   (when day-idx
                     (1+ day-idx))))))

@@ -16,6 +16,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'seq)
 (require 'org-atomic-core)
 (require 'org-atomic-util)
 (require 'subr-x)
@@ -40,39 +41,30 @@ Active status is defined by the `ATOMIC_DAYS' property.  If the property
 is missing, it defaults to active (returns non-nil).
 If DAY-OF-WEEK is non-nil, use that instead of today's day of week."
   (let* ((habit (org-atomic-core-parse-habit))
-         (active-days
-          (when habit
-            (org-atomic-core-habit-days habit))))
-    (or (null active-days)
-        (let ((dow
-               (or day-of-week
-                   (let ((d
-                          (calendar-day-of-week
-                           (calendar-current-date))))
-                     (if (= d 0)
-                         7
-                       d)))))
-          (member dow active-days)))))
+         (active-days (and habit (org-atomic-core-habit-days habit)))
+         (current-dow
+          (or day-of-week
+              (org-atomic-util--day-to-dow
+               (calendar-day-of-week (calendar-current-date))))))
+    (or (null active-days) (member current-dow active-days))))
 
-(defun org-atomic--org-habit-build-graph-advice
-    (orig-fun habit starting current ending)
+(defun org-atomic--org-habit-build-graph-advice (orig-fun &rest args)
   "Advice to intercept `org-habit-build-graph' and draw an atomic graph.
-ORIG-FUN is the original function.  HABIT, STARTING, CURRENT, and ENDING
-are the standard arguments."
-  (let ((parsed (org-atomic-core-parse-habit)))
-    (if parsed
-        (org-atomic-graph-build habit starting current ending parsed)
-      (funcall orig-fun habit starting current ending))))
+ORIG-FUN is the shadowed upstream function, and ARGS contains the standard
+arguments: (HABIT STARTING CURRENT ENDING)."
+  (if-let* ((parsed (org-atomic-core-parse-habit)))
+      (apply #'org-atomic-graph-build (append args (list parsed)))
+    (apply orig-fun args)))
 
 (defun org-atomic--find-next-active-day (day active-days)
   "Find the next day starting from DAY (inclusive) that is member of ACTIVE-DAYS.
 DAY is an integer day number.  ACTIVE-DAYS is a list of active weekdays."
   (if (null active-days)
       day
-    (while (not
-            (member (org-atomic-util--day-to-dow day) active-days))
-      (setq day (1+ day)))
-    day))
+    (seq-find
+     (lambda (d)
+       (member (org-atomic-util--day-to-dow d) active-days))
+     (number-sequence day (+ day 7)))))
 
 (defun org-atomic--update-scheduled-date (day &optional repeater)
   "Set the SCHEDULED property of the entry at point to DAY.
@@ -132,24 +124,21 @@ ORIG-FUN is the original function, and ARGS are its arguments."
   "Around advice to filter out inactive atomic habits.
 ORIG-FUN is the original function.  FILE is the file to search, DATE is the
 date to scan, and ARGS are additional arguments."
-  (let ((rtn (apply orig-fun file date args))
-        (filtered nil))
-    (dolist (item rtn)
+  (thread-last
+   (apply orig-fun file date args)
+   (seq-filter
+    (lambda (item)
       (let* ((marker (org-atomic-util--find-marker item))
              (habit
               (when marker
                 (org-atomic-core-parse-habit marker)))
-             (keep t))
-        (when (and habit (org-atomic-core-habit-days habit))
-          (let* ((dow
-                  (org-atomic-util--day-to-dow
-                   (calendar-day-of-week date)))
-                 (active-days (org-atomic-core-habit-days habit)))
-            (unless (member dow active-days)
-              (setq keep nil))))
-        (when keep
-          (push item filtered))))
-    (nreverse filtered)))
+             (active-days
+              (and habit (org-atomic-core-habit-days habit))))
+        (or (null active-days)
+            (let ((dow
+                   (org-atomic-util--day-to-dow
+                    (calendar-day-of-week date))))
+              (member dow active-days))))))))
 
 (defvar org-atomic--in-rollover nil
   "Dynamic variable bound to t to prevent infinite recursion in rollover.")
@@ -166,25 +155,22 @@ the past to the current day (or the next active day)."
           (with-current-buffer (find-file-noselect file)
             (let ((was-modified (buffer-modified-p)))
               (org-map-entries
-               (lambda ()
-                 (let* ((habit (org-atomic-core-parse-habit)))
-                   (when habit
-                     (let ((scheduled
-                            (org-entry-get nil "SCHEDULED")))
-                       (when (and scheduled
-                                  (string-match
-                                   org-ts-regexp3 scheduled))
-                         (let* ((ts-str (match-string 0 scheduled))
-                                (time
-                                 (org-time-string-to-time ts-str))
-                                (scheduled-day (time-to-days time)))
-                           (when (< scheduled-day (org-today))
-                             (org-atomic--reschedule-to-active
-                              habit
-                              (org-today)))))))))
+               #'org-atomic--roll-over-single-habit
                "+STYLE=\"habit\"")
               (when (and (not was-modified) (buffer-modified-p))
                 (save-buffer)))))))))
+
+(defun org-atomic--roll-over-single-habit ()
+  "Roll over the habit at point to today if it is overdue."
+  (let* ((habit (org-atomic-core-parse-habit))
+         (scheduled (and habit (org-entry-get nil "SCHEDULED")))
+         (scheduled-day
+          (when (and scheduled
+                     (string-match org-ts-regexp3 scheduled))
+            (time-to-days
+             (org-time-string-to-time (match-string 0 scheduled))))))
+    (when (and scheduled-day (< scheduled-day (org-today)))
+      (org-atomic--reschedule-to-active habit (org-today)))))
 
 (defun org-atomic--refresh-agenda ()
   "Refresh the Org Agenda buffer if it exists."
