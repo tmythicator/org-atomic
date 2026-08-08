@@ -119,26 +119,24 @@ ORIG-FUN is the original function, and ARGS are its arguments."
           (org-atomic--reschedule-to-active habit-struct))))
     repeated))
 
+(defun org-atomic-active-on-date-p (item-or-marker date)
+  "Check if ITEM-OR-MARKER is active on DATE (a list of month day year).
+Returns non-nil if active or not an atomic habit with restricted days."
+  (let* ((marker (org-atomic-util--find-marker item-or-marker))
+         (habit (and marker (org-atomic-core-parse-habit marker)))
+         (active-days (and habit (org-atomic-core-habit-days habit))))
+    (or (null active-days)
+        (let ((dow (org-atomic-util--day-to-dow (calendar-day-of-week date))))
+          (member dow active-days)))))
+
 (defun org-atomic--org-agenda-get-day-entries-advice
     (orig-fun file date &rest args)
   "Around advice to filter out inactive atomic habits.
 ORIG-FUN is the original function.  FILE is the file to search, DATE is the
 date to scan, and ARGS are additional arguments."
   (thread-last
-   (apply orig-fun file date args)
-   (seq-filter
-    (lambda (item)
-      (let* ((marker (org-atomic-util--find-marker item))
-             (habit
-              (when marker
-                (org-atomic-core-parse-habit marker)))
-             (active-days
-              (and habit (org-atomic-core-habit-days habit))))
-        (or (null active-days)
-            (let ((dow
-                   (org-atomic-util--day-to-dow
-                    (calendar-day-of-week date))))
-              (member dow active-days))))))))
+    (apply orig-fun file date args)
+    (seq-filter (lambda (item) (org-atomic-active-on-date-p item date)))))
 
 (defvar org-atomic--in-rollover nil
   "Dynamic variable bound to t to prevent infinite recursion in rollover.")
