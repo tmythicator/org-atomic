@@ -212,9 +212,7 @@ CANCELLED or other non-DONE states."
 Compares D against NOW-DAY.  Uses DONE-P to check completion,
 ACTIVE-DAYS to check if it's a scheduled day, and IS-BAD-HABIT
 to determine the habit type."
-  (let* ((weekday (org-atomic-util--day-to-dow d))
-         (is-active-day
-          (or (null active-days) (member weekday active-days))))
+  (let ((is-active-day (org-atomic-util-day-active-p d active-days)))
     (cond
      ((> d now-day)
       'future)

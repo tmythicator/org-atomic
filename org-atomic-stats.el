@@ -83,12 +83,10 @@ ACC is a tuple of (current longest temp broken)."
       ((active-days (org-atomic-core-habit-days habit-struct))
        (today (org-today))
        (today-active-p
-        (or (null active-days)
-            (member (org-atomic-util--day-to-dow today) active-days)))
+        (org-atomic-util-day-active-p today active-days))
        (today-success-p
         (org-atomic-core-habit-success-p
          habit-struct (member today done-dates)))
-
        ;; If today is an active day but not yet successful, start evaluating from yesterday
        (start-eval-day
         (if (and today-active-p (not today-success-p))
@@ -100,9 +98,7 @@ ACC is a tuple of (current longest temp broken)."
           (- today 365)))
        (days-seq
         (seq-filter
-         (lambda (d)
-           (let ((weekday (org-atomic-util--day-to-dow d)))
-             (or (null active-days) (member weekday active-days))))
+         (lambda (d) (org-atomic-util-day-active-p d active-days))
          (number-sequence start-eval-day min-day -1)))
        (result
         (seq-reduce
@@ -125,8 +121,7 @@ ACC is a tuple of (current longest temp broken)."
          (active-days-seq
           (seq-filter
            (lambda (d)
-             (let ((weekday (org-atomic-util--day-to-dow d)))
-               (or (null active-days) (member weekday active-days))))
+             (org-atomic-util-day-active-p d active-days))
            days-seq))
          (active-count (length active-days-seq))
          (success-count

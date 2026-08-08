@@ -239,6 +239,15 @@ TIME can be an absolute day number (integer) or a Lisp time value."
     (0 7)
     (dow dow)))
 
+(defun org-atomic-util-day-active-p (day-or-time active-days)
+  "Return non-nil if DAY-OR-TIME is an active weekday according to ACTIVE-DAYS.
+If ACTIVE-DAYS is nil, returns non-nil (active every day)."
+  (or (null active-days)
+      (let* ((day-num
+              (org-atomic-util--time-to-day-number day-or-time))
+             (dow (org-atomic-util--day-to-dow day-num)))
+        (memq dow active-days))))
+
 
 ;;; ============================================================================
 ;;; Text Cleaning & Formatting

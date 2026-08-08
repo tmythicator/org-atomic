@@ -597,5 +597,29 @@
     (should (string= (substring-no-properties char-other) " "))
     (should (eq (get-text-property 0 'face char-other) 'org-atomic-graph-skipped-face))))
 
+(ert-deftest org-atomic-test-day-active-p ()
+  "Test pure predicate org-atomic-util-day-active-p."
+  ;; nil active-days -> always active
+  (should (org-atomic-util-day-active-p 1 nil))
+  (should (org-atomic-util-day-active-p 7 nil))
+  ;; restricted active-days (workdays: 1-5)
+  (should (org-atomic-util-day-active-p 1 '(1 2 3 4 5)))
+  (should (org-atomic-util-day-active-p 5 '(1 2 3 4 5)))
+  (should-not (org-atomic-util-day-active-p 6 '(1 2 3 4 5)))
+  (should-not (org-atomic-util-day-active-p 7 '(1 2 3 4 5)))
+  ;; day-to-dow modulo behavior: 0 and 7 are Sunday
+  (should (org-atomic-util-day-active-p 0 '(7)))
+  (should (org-atomic-util-day-active-p 7 '(7)))
+  (should-not (org-atomic-util-day-active-p 7 '(1 2 3 4 5))))
+
+(ert-deftest org-atomic-test-clean-result-time ()
+  "Test cleaning bracketed and angled times using reducer pipeline."
+  (should (string= (org-atomic-util--clean-result-time "Task [07:30 - 08:30] details")
+                   "Task details"))
+  (should (string= (org-atomic-util--clean-result-time "Task <10:00> [- 09:00] more")
+                   "Task more"))
+  (should (string= (org-atomic-util--clean-result-time "Untimed task")
+                   "Untimed task")))
+
 (provide 'org-atomic-test)
 ;;; org-atomic-test.el ends here

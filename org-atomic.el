@@ -46,7 +46,7 @@ If DAY-OF-WEEK is non-nil, use that instead of today's day of week."
           (or day-of-week
               (org-atomic-util--day-to-dow
                (calendar-day-of-week (calendar-current-date))))))
-    (or (null active-days) (member current-dow active-days))))
+    (org-atomic-util-day-active-p current-dow active-days)))
 
 (defun org-atomic--org-habit-build-graph-advice (orig-fun &rest args)
   "Advice to intercept `org-habit-build-graph' and draw an atomic graph.
@@ -63,7 +63,7 @@ DAY is an integer day number.  ACTIVE-DAYS is a list of active weekdays."
       day
     (seq-find
      (lambda (d)
-       (member (org-atomic-util--day-to-dow d) active-days))
+       (org-atomic-util-day-active-p d active-days))
      (number-sequence day (+ day 7)))))
 
 (defun org-atomic--update-scheduled-date (day &optional repeater)
@@ -124,12 +124,10 @@ ORIG-FUN is the original function, and ARGS are its arguments."
 Returns non-nil if active or not an atomic habit with restricted days."
   (let* ((marker (org-atomic-util--find-marker item-or-marker))
          (habit (and marker (org-atomic-core-parse-habit marker)))
-         (active-days (and habit (org-atomic-core-habit-days habit))))
-    (or (null active-days)
-        (let ((dow
-               (org-atomic-util--day-to-dow
-                (calendar-day-of-week date))))
-          (member dow active-days)))))
+         (active-days (and habit (org-atomic-core-habit-days habit)))
+         (dow
+          (org-atomic-util--day-to-dow (calendar-day-of-week date))))
+    (org-atomic-util-day-active-p dow active-days)))
 
 (defun org-atomic--org-agenda-get-day-entries-advice
     (orig-fun file date &rest args)
