@@ -268,7 +268,9 @@ VISITED is a list of already visited IDs to prevent infinite loops."
          ("Attractive" . ,(org-atomic-core-habit-attractive habit))
          ("Easy" . ,(org-atomic-core-habit-easy habit))
          ("Satisfying" . ,(org-atomic-core-habit-satisfying habit))))
-     (cl-remove-if-not #'cdr))))
+     (seq-filter
+      (pcase-lambda (`(,_ . ,val))
+        (and val (not (string-empty-p (string-trim val)))))))))
 
 (provide 'org-atomic-core)
 ;;; org-atomic-core.el ends here
