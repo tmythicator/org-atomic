@@ -235,13 +235,9 @@ TIME can be an absolute day number (integer) or a Lisp time value."
 
 (defun org-atomic-util--day-to-dow (day-or-cal-dow)
   "Convert DAY-OR-CAL-DOW to standard weekday index (1=Monday, 7=Sunday)."
-  (let ((d
-         (if (>= day-or-cal-dow 7)
-             (mod day-or-cal-dow 7)
-           day-or-cal-dow)))
-    (if (= d 0)
-        7
-      d)))
+  (pcase (mod day-or-cal-dow 7)
+    (0 7)
+    (dow dow)))
 
 
 ;;; ============================================================================
