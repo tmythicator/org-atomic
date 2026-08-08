@@ -14,10 +14,12 @@
 ;;; Code:
 
 (require 'cl-lib)
-(require 'org-atomic-core)
+(require 'seq)
+(require 'pcase)
 (require 'subr-x)
 (require 'org)
 (require 'org-agenda)
+(require 'org-atomic-core)
 (require 'org-atomic-util)
 
 (defgroup org-atomic-agenda nil
@@ -118,6 +120,17 @@ Compares agenda entries A and B by time, then stacks them together."
 (defvar org-atomic-agenda--saved-cmp-user-defined nil
   "Saved value of `org-agenda-cmp-user-defined`.")
 
+(defun org-atomic-agenda--inject-sorting-rule (strategy)
+  "Pure function: return a new STRATEGY with `user-defined-up' prepended."
+  (seq-map
+   (pcase-lambda (`(,key . ,rules))
+     (if (and (listp rules)
+              (not (memq 'user-defined-up rules))
+              (not (memq 'user-defined-down rules)))
+         (cons key (cons 'user-defined-up rules))
+       (cons key rules)))
+   strategy))
+
 (defun org-atomic-agenda--enable-sorting ()
   "Enable custom agenda sorting for org-atomic-agenda."
   (setq org-atomic-agenda--saved-cmp-user-defined
@@ -126,15 +139,9 @@ Compares agenda entries A and B by time, then stacks them together."
   ;; Modify org-agenda-sorting-strategy
   (setq org-atomic-agenda--saved-sorting-strategy
         (copy-tree org-agenda-sorting-strategy))
-  (let ((strategy (copy-tree org-agenda-sorting-strategy)))
-    (dolist (item strategy)
-      (let ((rules (cdr item)))
-        (when (and (listp rules)
-                   (not (member 'user-defined-up rules))
-                   (not (member 'user-defined-down rules)))
-          ;; Prepend user-defined-up to rules
-          (setcdr item (cons 'user-defined-up rules)))))
-    (setq org-agenda-sorting-strategy strategy)))
+  (setq org-agenda-sorting-strategy
+        (org-atomic-agenda--inject-sorting-rule
+         org-agenda-sorting-strategy)))
 
 (defun org-atomic-agenda--disable-sorting ()
   "Disable custom agenda sorting for org-atomic-agenda."
@@ -269,44 +276,31 @@ This runs after `org-agenda' has finished styling the entries."
     (save-restriction
       (widen)
       ;; 1. Restore face properties
-      (goto-char (point-min))
-      (let ((pos (point)))
-        (while (< pos (point-max))
-          (let* ((next
-                  (next-single-property-change pos 'font-lock-face
-                                               nil (point-max)))
-                 (fl-face (get-text-property pos 'font-lock-face)))
-            (when (memq
-                   fl-face
-                   '(org-atomic-agenda-id-face
-                     org-atomic-agenda-bad-habit-face
-                     org-atomic-agenda-branch-face))
-              (let ((current-face (get-text-property pos 'face)))
-                (put-text-property
-                 pos next 'face
-                 (if (listp current-face)
-                     (cons fl-face (delq fl-face current-face))
-                   (list fl-face current-face)))))
-            (setq pos next))))
+      (org-atomic-util-walk-property-intervals
+       'font-lock-face
+       (lambda (start end fl-face)
+         (when (memq
+                fl-face
+                '(org-atomic-agenda-id-face
+                  org-atomic-agenda-bad-habit-face
+                  org-atomic-agenda-branch-face))
+           (let ((current-face (get-text-property start 'face)))
+             (put-text-property
+              start end 'face
+              (if (listp current-face)
+                  (cons fl-face (delq fl-face current-face))
+                (list fl-face current-face)))))))
       ;; 2. Restore/merge help-echo tooltips
-      (goto-char (point-min))
-      (let ((pos (point)))
-        (while (< pos (point-max))
-          (let* ((next
-                  (next-single-property-change pos 'org-atomic-tooltip
-                                               nil (point-max)))
-                 (tooltip
-                  (get-text-property pos 'org-atomic-tooltip)))
-            (when tooltip
-              (let ((current-echo (get-text-property pos 'help-echo)))
-                (put-text-property
-                 pos next 'help-echo
-                 (if (and current-echo
-                          (not
-                           (string-prefix-p tooltip current-echo)))
-                     (concat tooltip "\n---\n" current-echo)
-                   tooltip))))
-            (setq pos next)))))))
+      (org-atomic-util-walk-property-intervals
+       'org-atomic-tooltip
+       (lambda (start end tooltip)
+         (let ((current-echo (get-text-property start 'help-echo)))
+           (put-text-property
+            start end 'help-echo
+            (if (and current-echo
+                     (not (string-prefix-p tooltip current-echo)))
+                (concat tooltip "\n---\n" current-echo)
+              tooltip))))))))
 
 (provide 'org-atomic-agenda)
 ;;; org-atomic-agenda.el ends here
