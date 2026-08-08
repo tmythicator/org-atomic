@@ -88,31 +88,39 @@
         (when (> (length lines) 1)
           (string-join lines "\n"))))))
 
+(defun org-atomic-agenda--cmp-time (time-a time-b)
+  "Compare effective times TIME-A and TIME-B."
+  (org-atomic-util--cmp-number-with-nil time-a time-b))
+
+(defun org-atomic-agenda--cmp-stacks (key-a key-b)
+  "Compare stack keys KEY-A and KEY-B hierarchically.
+Returns -1 if KEY-A comes before KEY-B under the same root,
+1 if after, or nil if not comparable."
+  (when (and key-a key-b)
+    (let ((root-a (car (split-string key-a "/")))
+          (root-b (car (split-string key-b "/"))))
+      (when (string= root-a root-b)
+        (cond
+         ((string-lessp key-a key-b)
+          -1)
+         ((string-lessp key-b key-a)
+          1))))))
+
 (defun org-atomic-agenda-cmp (a b)
   "Custom comparator for sorting atomic habits in the agenda.
 Compares agenda entries A and B by time, then stacks them together."
   (let* ((marker-a (org-atomic-util--find-marker a))
          (marker-b (org-atomic-util--find-marker b))
          (key-a
-          (when marker-a
-            (org-atomic-core--get-stack-key marker-a)))
+          (and marker-a (org-atomic-core--get-stack-key marker-a)))
          (key-b
-          (when marker-b
-            (org-atomic-core--get-stack-key marker-b)))
+          (and marker-b (org-atomic-core--get-stack-key marker-b)))
          (time-a
           (org-atomic-core--get-effective-time a key-a marker-a))
          (time-b
           (org-atomic-core--get-effective-time b key-b marker-b)))
-    (or (org-atomic-util--cmp-number-with-nil time-a time-b)
-        (when (and key-a key-b)
-          (let ((root-a (car (split-string key-a "/")))
-                (root-b (car (split-string key-b "/"))))
-            (when (string= root-a root-b)
-              (cond
-               ((string-lessp key-a key-b)
-                -1)
-               ((string-lessp key-b key-a)
-                1))))))))
+    (or (org-atomic-agenda--cmp-time time-a time-b)
+        (org-atomic-agenda--cmp-stacks key-a key-b))))
 
 (defvar org-atomic-agenda--saved-sorting-strategy nil
   "Saved value of `org-agenda-sorting-strategy`.")
