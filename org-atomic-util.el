@@ -212,7 +212,7 @@ comma/space separated day numbers, or names (e.g. \"mon,tue\" or \"Monday\")."
           (thread-last
            (split-string clean-str
                          org-atomic-util--day-separator-regexp t)
-           (seq-keep #'org-atomic-util--token-to-dow))))))
+           (seq-map #'org-atomic-util--token-to-dow) (delq nil))))))
 
 (defun org-atomic-util--parse-time-str-to-int (str)
   "Parse a time string (HH:MM) from STR into an integer HHMM."
