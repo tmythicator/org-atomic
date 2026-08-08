@@ -15,6 +15,8 @@
 
 (require 'cl-lib)
 (require 'seq)
+(require 'pcase)
+(require 'subr-x)
 (require 'org-atomic-core)
 (require 'org-atomic-util)
 (require 'org-habit)
@@ -109,6 +111,50 @@
   "Face for consistency graph boundary symbols."
   :group 'org-atomic-graph)
 
+(defun org-atomic-graph--status-kind (status)
+  "Classify habit history STATUS into :success, :missed, or :ignored."
+  (pcase status
+    ((or 'good-done 'bad-avoided) :success)
+    ((or 'good-missed 'bad-done) :missed)
+    (_ :ignored)))
+
+(defun org-atomic-graph--calculate-history-percentage (history)
+  "Calculate completion percentage from HISTORY in a single pass."
+  (pcase-let* ((`(:success ,succ :active ,active)
+                (seq-reduce
+                 (pcase-lambda (`(:success ,s :active ,a) status)
+                   (pcase (org-atomic-graph--status-kind status)
+                     (:success (list :success (1+ s) :active (1+ a)))
+                     (:missed (list :success s :active (1+ a)))
+                     (:ignored (list :success s :active a))))
+                 history '(:success 0 :active 0))))
+    (org-atomic-util-calculate-percentage succ active)))
+
+(defun org-atomic-graph--format-day-char (status)
+  "Render propertized character representing habit day STATUS."
+  (pcase status
+    ('good-done
+     (propertize (string org-atomic-graph-done-char)
+                 'face
+                 'org-atomic-graph-done-face))
+    ('good-missed
+     (propertize (string org-atomic-graph-missed-char)
+                 'face
+                 'org-atomic-graph-missed-face))
+    ('bad-done
+     (propertize (string org-atomic-graph-done-char)
+                 'face
+                 'org-atomic-graph-missed-face))
+    ('bad-avoided
+     (propertize (string org-atomic-graph-missed-char)
+                 'face
+                 'org-atomic-graph-done-face))
+    ('skipped
+     (propertize (string org-atomic-graph-skipped-char)
+                 'face
+                 'org-atomic-graph-skipped-face))
+    (_ (propertize " " 'face 'org-atomic-graph-skipped-face))))
+
 (defun org-atomic-graph-draw (history &optional show-percentage)
   "Draw a consistency graph from a HISTORY list.
 Each element in HISTORY should be one of `good-done', `good-missed',
@@ -122,52 +168,17 @@ If SHOW-PERCENTAGE is non-nil, append the completion percentage."
           (propertize (string org-atomic-graph-end-char)
                       'face
                       'org-atomic-graph-border-face))
-         (body-strs
-          (mapcar
-           (lambda (status)
-             (cl-case
-              status
-              (good-done
-               (propertize (string org-atomic-graph-done-char)
-                           'face 'org-atomic-graph-done-face))
-              (good-missed
-               (propertize (string org-atomic-graph-missed-char)
-                           'face 'org-atomic-graph-missed-face))
-              (bad-done
-               (propertize (string org-atomic-graph-done-char)
-                           'face 'org-atomic-graph-missed-face))
-              (bad-avoided
-               (propertize (string org-atomic-graph-missed-char)
-                           'face 'org-atomic-graph-done-face))
-              (skipped
-               (propertize (string org-atomic-graph-skipped-char)
-                           'face 'org-atomic-graph-skipped-face))
-              (t
-               (propertize " "
-                           'face 'org-atomic-graph-skipped-face))))
-           history))
-         (drawn (concat start-str (apply #'concat body-strs) end-str))
+         (body-str
+          (mapconcat #'org-atomic-graph--format-day-char history ""))
          (pct-str
           (if show-percentage
-              (let* ((success-count
-                      (+ (cl-count-if
-                          (lambda (s) (eq s 'good-done)) history)
-                         (cl-count-if
-                          (lambda (s) (eq s 'bad-avoided)) history)))
-                     (active-count
-                      (+ success-count
-                         (cl-count-if
-                          (lambda (s) (eq s 'good-missed)) history)
-                         (cl-count-if
-                          (lambda (s) (eq s 'bad-done)) history)))
-                     (pct
-                      (org-atomic-util-calculate-percentage
-                       success-count active-count)))
-                (propertize (format " %d%%" pct)
-                            'face
-                            'org-atomic-graph-skipped-face))
+              (propertize
+               (format " %d%%"
+                       (org-atomic-graph--calculate-history-percentage
+                        history))
+               'face 'org-atomic-graph-skipped-face)
             "")))
-    (concat drawn pct-str)))
+    (concat start-str body-str end-str pct-str)))
 
 (defun org-atomic-graph--get-non-canceled-done-dates
     (&optional marker)

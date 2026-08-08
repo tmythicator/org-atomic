@@ -551,5 +551,51 @@
     ;; 4. Missing mapping (should return nil)
     (should (null (org-atomic-core--parse-property-mapping '("ATOMIC_NEXT" . :next) props)))))
 
+(ert-deftest org-atomic-test-graph-helpers ()
+  "Test pure helper functions in org-atomic-graph."
+  ;; 1. Status classification
+  (should (eq (org-atomic-graph--status-kind 'good-done) :success))
+  (should (eq (org-atomic-graph--status-kind 'bad-avoided) :success))
+  (should (eq (org-atomic-graph--status-kind 'good-missed) :missed))
+  (should (eq (org-atomic-graph--status-kind 'bad-done) :missed))
+  (should (eq (org-atomic-graph--status-kind 'skipped) :ignored))
+  (should (eq (org-atomic-graph--status-kind 'future) :ignored))
+  (should (eq (org-atomic-graph--status-kind 'unknown) :ignored))
+
+  ;; 2. Single-pass percentage calculations
+  (should (= (org-atomic-graph--calculate-history-percentage nil) 0))
+  (should (= (org-atomic-graph--calculate-history-percentage '(skipped skipped future)) 0))
+  (should (= (org-atomic-graph--calculate-history-percentage '(good-done bad-avoided)) 100))
+  (should (= (org-atomic-graph--calculate-history-percentage '(good-missed bad-done)) 0))
+  (should (= (org-atomic-graph--calculate-history-percentage '(good-done good-missed skipped)) 50))
+  (should (= (org-atomic-graph--calculate-history-percentage
+              '(good-done good-missed bad-avoided bad-done skipped future))
+             50))
+
+  ;; 3. Character propertization
+  (let ((char-done (org-atomic-graph--format-day-char 'good-done))
+        (char-missed (org-atomic-graph--format-day-char 'good-missed))
+        (char-avoided (org-atomic-graph--format-day-char 'bad-avoided))
+        (char-bad-done (org-atomic-graph--format-day-char 'bad-done))
+        (char-skipped (org-atomic-graph--format-day-char 'skipped))
+        (char-other (org-atomic-graph--format-day-char 'future)))
+    (should (string= (substring-no-properties char-done) (string org-atomic-graph-done-char)))
+    (should (eq (get-text-property 0 'face char-done) 'org-atomic-graph-done-face))
+
+    (should (string= (substring-no-properties char-missed) (string org-atomic-graph-missed-char)))
+    (should (eq (get-text-property 0 'face char-missed) 'org-atomic-graph-missed-face))
+
+    (should (string= (substring-no-properties char-avoided) (string org-atomic-graph-missed-char)))
+    (should (eq (get-text-property 0 'face char-avoided) 'org-atomic-graph-done-face))
+
+    (should (string= (substring-no-properties char-bad-done) (string org-atomic-graph-done-char)))
+    (should (eq (get-text-property 0 'face char-bad-done) 'org-atomic-graph-missed-face))
+
+    (should (string= (substring-no-properties char-skipped) (string org-atomic-graph-skipped-char)))
+    (should (eq (get-text-property 0 'face char-skipped) 'org-atomic-graph-skipped-face))
+
+    (should (string= (substring-no-properties char-other) " "))
+    (should (eq (get-text-property 0 'face char-other) 'org-atomic-graph-skipped-face))))
+
 (provide 'org-atomic-test)
 ;;; org-atomic-test.el ends here
