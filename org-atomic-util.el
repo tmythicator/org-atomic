@@ -15,6 +15,7 @@
 
 (require 'cl-lib)
 (require 'subr-x)
+(require 'seq)
 (require 'calendar)
 (require 'org)
 
@@ -125,6 +126,18 @@ heading."
    (t
     (org-atomic-util--get-marker-from-context))))
 
+(defun org-atomic-util-walk-property-intervals (prop fn &optional start end)
+  "Iterate over intervals of text property PROP from START to END, calling FN.
+FN is called with (START-POS END-POS PROPERTY-VALUE) for each non-nil interval."
+  (let ((pos (or start (point-min)))
+        (limit (or end (point-max))))
+    (while (< pos limit)
+      (let ((next (next-single-property-change pos prop nil limit))
+            (val (get-text-property pos prop)))
+        (when val
+          (funcall fn pos next val))
+        (setq pos next)))))
+
 
 ;;; ============================================================================
 ;;; Heading Resolution & Context
@@ -164,42 +177,42 @@ and fallback to a regex search backward if that fails."
 ;;; Day & Time Parsing
 ;;; ============================================================================
 
+(defun org-atomic-util--token-to-dow (tok)
+  "Parse day token TOK into a weekday integer (1=Monday, 7=Sunday).
+Return nil if TOK does not match a valid day number or name."
+  (cond
+   ;; Direct integer
+   ((string-match-p org-atomic-util--day-digit-regexp tok)
+    (string-to-number tok))
+   ;; Day name abbreviations / full names (Mon -> 1, Sun -> 7)
+   (t
+    (let ((day-idx
+           (cl-position
+            (substring tok 0 (min 3 (length tok)))
+            org-atomic-util-weekday-names
+            :test #'string=)))
+      (when day-idx
+        (1+ day-idx))))))
+
 (defun org-atomic-util--parse-days (days-str)
   "Parse DAYS-STR into a list of day integers (1=Monday, 7=Sunday).
 Accepts custom day group names from `org-atomic-day-groups',
 comma/space separated day numbers, or names (e.g. \"mon,tue\" or \"Monday\")."
-  (when (and days-str (not (string-empty-p (string-trim days-str))))
-    (let* ((clean-str (downcase (string-trim days-str)))
+  (when-let* ((trimmed (and days-str (string-trim days-str)))
+              ((not (string-empty-p trimmed))))
+    (let* ((clean-str (downcase trimmed))
            (group-match
             (cdr
              (assoc
               clean-str
               (and (boundp 'org-atomic-core-day-groups)
                    org-atomic-core-day-groups)))))
-      (if group-match
-          group-match
-        (let ((tokens
-               (split-string
-                clean-str
-                org-atomic-util--day-separator-regexp t)))
+      (or group-match
           (thread-last
-           (mapcar
-            (lambda (tok)
-              (cond
-               ;; Direct integer
-               ((string-match-p org-atomic-util--day-digit-regexp tok)
-                (string-to-number tok))
-               ;; Day name abbreviations / full names (Mon -> 1, Sun -> 7)
-               (t
-                (let ((day-idx
-                       (cl-position
-                        (substring tok 0 (min 3 (length tok)))
-                        org-atomic-util-weekday-names
-                        :test #'string=)))
-                  (when day-idx
-                    (1+ day-idx))))))
-            tokens)
-           (delq nil)))))))
+            (split-string
+             clean-str
+             org-atomic-util--day-separator-regexp t)
+            (seq-keep #'org-atomic-util--token-to-dow))))))
 
 (defun org-atomic-util--parse-time-str-to-int (str)
   "Parse a time string (HH:MM) from STR into an integer HHMM."
@@ -273,21 +286,15 @@ TIME can be an absolute day number (integer) or a Lisp time value."
 (defun org-atomic-util--cmp-number-with-nil (a b)
   "Compare numbers A and B, treating nil as larger than any number.
 Returns -1 if A < B, 1 if A > B, or nil if they are equal or both nil."
-  (cond
-   ((and a b)
-    (cond
-     ((< a b)
-      -1)
-     ((> a b)
-      1)
-     (t
-      nil)))
-   (a
-    -1)
-   (b
-    1)
-   (t
-    nil)))
+  (pcase (cons a b)
+    (`(nil . nil) nil)
+    (`(,_ . nil) -1)
+    (`(nil . ,_) 1)
+    (`(,na . ,nb)
+     (cond
+      ((< na nb) -1)
+      ((> na nb) 1)
+      (t nil)))))
 
 (defun org-atomic-util-calculate-percentage
     (success-count active-count)
