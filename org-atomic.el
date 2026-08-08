@@ -126,7 +126,9 @@ Returns non-nil if active or not an atomic habit with restricted days."
          (habit (and marker (org-atomic-core-parse-habit marker)))
          (active-days (and habit (org-atomic-core-habit-days habit))))
     (or (null active-days)
-        (let ((dow (org-atomic-util--day-to-dow (calendar-day-of-week date))))
+        (let ((dow
+               (org-atomic-util--day-to-dow
+                (calendar-day-of-week date))))
           (member dow active-days)))))
 
 (defun org-atomic--org-agenda-get-day-entries-advice
@@ -135,8 +137,9 @@ Returns non-nil if active or not an atomic habit with restricted days."
 ORIG-FUN is the original function.  FILE is the file to search, DATE is the
 date to scan, and ARGS are additional arguments."
   (thread-last
-    (apply orig-fun file date args)
-    (seq-filter (lambda (item) (org-atomic-active-on-date-p item date)))))
+   (apply orig-fun file date args)
+   (seq-filter
+    (lambda (item) (org-atomic-active-on-date-p item date)))))
 
 (defvar org-atomic--in-rollover nil
   "Dynamic variable bound to t to prevent infinite recursion in rollover.")

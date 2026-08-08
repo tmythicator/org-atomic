@@ -126,7 +126,8 @@ heading."
    (t
     (org-atomic-util--get-marker-from-context))))
 
-(defun org-atomic-util-walk-property-intervals (prop fn &optional start end)
+(defun org-atomic-util-walk-property-intervals
+    (prop fn &optional start end)
   "Iterate over intervals of text property PROP from START to END, calling FN.
 FN is called with (START-POS END-POS PROPERTY-VALUE) for each non-nil interval."
   (let ((pos (or start (point-min)))
@@ -209,10 +210,9 @@ comma/space separated day numbers, or names (e.g. \"mon,tue\" or \"Monday\")."
                    org-atomic-core-day-groups)))))
       (or group-match
           (thread-last
-            (split-string
-             clean-str
-             org-atomic-util--day-separator-regexp t)
-            (seq-keep #'org-atomic-util--token-to-dow))))))
+           (split-string clean-str
+                         org-atomic-util--day-separator-regexp t)
+           (seq-keep #'org-atomic-util--token-to-dow))))))
 
 (defun org-atomic-util--parse-time-str-to-int (str)
   "Parse a time string (HH:MM) from STR into an integer HHMM."
@@ -292,9 +292,12 @@ Returns -1 if A < B, 1 if A > B, or nil if they are equal or both nil."
     (`(nil . ,_) 1)
     (`(,na . ,nb)
      (cond
-      ((< na nb) -1)
-      ((> na nb) 1)
-      (t nil)))))
+      ((< na nb)
+       -1)
+      ((> na nb)
+       1)
+      (t
+       nil)))))
 
 (defun org-atomic-util-calculate-percentage
     (success-count active-count)
