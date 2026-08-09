@@ -242,6 +242,19 @@ ACC is a tuple of (current longest temp broken)."
         "\n"))
      "\n")))
 
+(defun org-atomic-stats--render-section (title habits range)
+  "Render a stats section with TITLE for HABITS over RANGE days."
+  (when habits
+    (concat
+     (propertize (format "  %s\n\n" title)
+                 'face
+                 'org-atomic-stats-subheader-face)
+     (mapconcat (pcase-lambda (`(,habit ,marker . ,_))
+                  (org-atomic-stats--format-habit-card
+                   habit marker range))
+                habits
+                ""))))
+
 (defun org-atomic-stats--render ()
   "Render the Org-Atomic stats page."
   (let* ((habits (org-atomic-stats--collect-habits))
@@ -270,29 +283,11 @@ ACC is a tuple of (current longest temp broken)."
                    total-habits total-good total-bad)
            (format "    Tracking Range: last %d days\n\n" range)))
          (good-section
-          (when good-habits
-            (concat
-             (propertize "  GOOD HABITS\n\n"
-                         'face
-                         'org-atomic-stats-subheader-face)
-             (string-join (seq-map
-                           (lambda (item)
-                             (org-atomic-stats--format-habit-card
-                              (nth 0 item) (nth 1 item) range))
-                           good-habits)
-                          ""))))
+          (org-atomic-stats--render-section
+           "GOOD HABITS" good-habits range))
          (bad-section
-          (when bad-habits
-            (concat
-             (propertize "  BAD HABITS\n\n"
-                         'face
-                         'org-atomic-stats-subheader-face)
-             (string-join (seq-map
-                           (lambda (item)
-                             (org-atomic-stats--format-habit-card
-                              (nth 0 item) (nth 1 item) range))
-                           bad-habits)
-                          "")))))
+          (org-atomic-stats--render-section
+           "BAD HABITS" bad-habits range)))
     (insert (concat banner summary good-section bad-section))
     (goto-char (point-min))))
 
