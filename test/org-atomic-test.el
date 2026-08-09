@@ -612,6 +612,17 @@
   (should (org-atomic-util-day-active-p 7 '(7)))
   (should-not (org-atomic-util-day-active-p 7 '(1 2 3 4 5))))
 
+(ert-deftest org-atomic-test-find-next-active-day ()
+  "Test finding the next active day from a starting day."
+  ;; If active-days is nil, returns starting day
+  (should (= (org-atomic-util-find-next-active-day 10 nil) 10))
+  ;; Day 1 (Mon) is active for workdays (1-5) -> returns 1
+  (should (= (org-atomic-util-find-next-active-day 1 '(1 2 3 4 5)) 1))
+  ;; Day 5 (Fri) is active for weekends (6-7) -> next is 6 (Sat)
+  (should (= (org-atomic-util-find-next-active-day 5 '(6 7)) 6))
+  ;; Day 6 (Sat) is active for workdays (1-5) -> next is 8 (Mon)
+  (should (= (org-atomic-util-find-next-active-day 6 '(1 2 3 4 5)) 8)))
+
 (ert-deftest org-atomic-test-clean-result-time ()
   "Test cleaning bracketed and angled times using reducer pipeline."
   (should (string= (org-atomic-util--clean-result-time "Task [07:30 - 08:30] details")

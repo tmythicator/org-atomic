@@ -248,6 +248,16 @@ If ACTIVE-DAYS is nil, returns non-nil (active every day)."
              (dow (org-atomic-util--day-to-dow day-num)))
         (memq dow active-days))))
 
+(defun org-atomic-util-find-next-active-day (day active-days)
+  "Find the next day starting from DAY (inclusive) that is member of ACTIVE-DAYS.
+DAY is an integer day number.  ACTIVE-DAYS is a list of active weekdays."
+  (if (null active-days)
+      day
+    (seq-find
+     (lambda (d)
+       (org-atomic-util-day-active-p d active-days))
+     (number-sequence day (+ day 7)))))
+
 
 ;;; ============================================================================
 ;;; Text Cleaning & Formatting

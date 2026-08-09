@@ -56,16 +56,6 @@ arguments: (HABIT STARTING CURRENT ENDING)."
       (apply #'org-atomic-graph-build (append args (list parsed)))
     (apply orig-fun args)))
 
-(defun org-atomic--find-next-active-day (day active-days)
-  "Find the next day starting from DAY (inclusive) that is member of ACTIVE-DAYS.
-DAY is an integer day number.  ACTIVE-DAYS is a list of active weekdays."
-  (if (null active-days)
-      day
-    (seq-find
-     (lambda (d)
-       (org-atomic-util-day-active-p d active-days))
-     (number-sequence day (+ day 7)))))
-
 (defun org-atomic--update-scheduled-date (day &optional repeater)
   "Set the SCHEDULED property of the entry at point to DAY.
 DAY is an integer representing day number.
@@ -93,7 +83,7 @@ If BASE-DAY is nil, it defaults to the entry's currently scheduled day."
              (start-day (or base-day orig-day))
              (active-days (org-atomic-core-habit-days habit-struct))
              (next-day
-              (org-atomic--find-next-active-day
+              (org-atomic-util-find-next-active-day
                start-day active-days)))
         (when (/= orig-day next-day)
           (let ((repeater
