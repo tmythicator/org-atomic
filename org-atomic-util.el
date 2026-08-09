@@ -270,10 +270,11 @@ If ACTIVE-DAYS is nil, returns non-nil (active every day)."
      (org-trim))))
 
 (defconst org-atomic-util--time-cleanup-patterns
-  (list org-atomic-util--time-range-bracket-regexp
-        org-atomic-util--time-duration-bracket-regexp
-        org-atomic-util--time-range-angle-regexp
-        org-atomic-util--time-duration-angle-regexp)
+  (list
+   org-atomic-util--time-range-bracket-regexp
+   org-atomic-util--time-duration-bracket-regexp
+   org-atomic-util--time-range-angle-regexp
+   org-atomic-util--time-duration-angle-regexp)
   "List of regexes matching time ranges and duration expressions.")
 
 (defun org-atomic-util--clean-result-time (str)
@@ -281,8 +282,7 @@ If ACTIVE-DAYS is nil, returns non-nil (active every day)."
   (seq-reduce
    (lambda (acc pat)
      (replace-regexp-in-string (concat "[ \t]*" pat) "" acc))
-   org-atomic-util--time-cleanup-patterns
-   str))
+   org-atomic-util--time-cleanup-patterns str))
 
 
 ;;; ============================================================================

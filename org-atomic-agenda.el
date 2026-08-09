@@ -69,9 +69,9 @@
              (why (org-atomic-core-habit-why habit))
              (strategies (org-atomic-core-habit-strategies habit))
              (strategy-lines
-              (mapcar
-               (lambda (s)
-                 (format "Make It %s: %s" (car s) (cdr s)))
+              (seq-map
+               (pcase-lambda (`(,label . ,text))
+                 (format "Make It %s: %s" label text))
                strategies))
              (lines
               (thread-last
