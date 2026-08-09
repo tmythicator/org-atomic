@@ -233,20 +233,47 @@ TIME can be an absolute day number (integer) or a Lisp time value."
       time
     (time-to-days time)))
 
+(defun org-atomic-util--day-to-time (day)
+  "Convert an absolute DAY number to a Lisp time value."
+  (let ((epoch-offset (time-to-days (encode-time 0 0 0 1 1 1970))))
+    (days-to-time (- day epoch-offset))))
+
+(defun org-atomic-util-format-scheduled-timestamp
+    (day &optional repeater)
+  "Format an Org SCHEDULED timestamp string for DAY and optional REPEATER."
+  (let* ((new-time (org-atomic-util--day-to-time day))
+         (base-date-str (format-time-string "%Y-%m-%d %a" new-time)))
+    (if repeater
+        (format "<%s %s>" base-date-str repeater)
+      (format "<%s>" base-date-str))))
+
 (defun org-atomic-util--day-to-dow (day-or-cal-dow)
   "Convert DAY-OR-CAL-DOW to standard weekday index (1=Monday, 7=Sunday)."
   (pcase (mod day-or-cal-dow 7)
     (0 7)
     (dow dow)))
 
-(defun org-atomic-util-day-active-p (day-or-time active-days)
-  "Return non-nil if DAY-OR-TIME is an active weekday according to ACTIVE-DAYS.
+(defun org-atomic-util-date-to-dow (date)
+  "Convert DATE to a standard weekday index (1=Monday ... 7=Sunday).
+DATE can be a calendar list (MONTH DAY YEAR), an integer day number,
+a Lisp time value, or nil (defaults to today)."
+  (cond
+   ((null date)
+    (org-atomic-util--day-to-dow
+     (calendar-day-of-week (calendar-current-date))))
+   ((and (listp date) (= (length date) 3) (integerp (car date)))
+    (org-atomic-util--day-to-dow (calendar-day-of-week date)))
+   ((integerp date)
+    (org-atomic-util--day-to-dow date))
+   (t
+    (org-atomic-util--day-to-dow (time-to-days date)))))
+
+(defun org-atomic-util-day-active-p (date active-days)
+  "Return non-nil if DATE is an active weekday according to ACTIVE-DAYS.
+DATE can be a calendar list (M D Y), an integer day number, or DOW index.
 If ACTIVE-DAYS is nil, returns non-nil (active every day)."
   (or (null active-days)
-      (let* ((day-num
-              (org-atomic-util--time-to-day-number day-or-time))
-             (dow (org-atomic-util--day-to-dow day-num)))
-        (memq dow active-days))))
+      (memq (org-atomic-util-date-to-dow date) active-days)))
 
 (defun org-atomic-util-find-next-active-day (day active-days)
   "Find the next day starting from DAY (inclusive) that is member of ACTIVE-DAYS.

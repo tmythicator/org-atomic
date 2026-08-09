@@ -294,8 +294,7 @@ arguments."
                         tooltip)
           formatted)))))
 
-;;;###autoload
-(defun org-atomic-agenda-finalize-faces ()
+(defun org-atomic-agenda--finalize-faces ()
   "Restore org-atomic-agenda faces in the agenda buffer.
 This runs after `org-agenda' has finished styling the entries."
   (org-atomic-core-clear-caches)
