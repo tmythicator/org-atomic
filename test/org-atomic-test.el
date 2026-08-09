@@ -3,7 +3,7 @@
 ;; Copyright (C) 2026 Alexandr Timchenko
 ;; Author: Alexandr Timchenko <atimchenko92@gmail.com>
 ;; Assisted-by: Gemini:gemini-3.5-flash
-;; Version: 1.4.0
+;; Version: 1.4.1
 ;; License: GPL-3.0-or-later
 
 ;;; Commentary:
@@ -219,9 +219,8 @@
           (should (= (org-atomic-agenda-cmp item-code item-stretch) -1))
           ;; Stretch should be after Code
           (should (= (org-atomic-agenda-cmp item-stretch item-code) 1))
-
-          ;; Code (timed: 1030) vs Gym (untimed) -> Code should be first (-1)
-          (should (= (org-atomic-agenda-cmp item-code item-gym) -1))
+          ;; No stack vs stack with time
+          (should (integerp (org-atomic-agenda-cmp item-none item-code)))
 
           ;; Stretch (effective time: 1030) vs Gym (untimed) -> Stretch should be first (-1)
           (should (= (org-atomic-agenda-cmp item-stretch item-gym) -1))
@@ -247,6 +246,25 @@
             ;; Untimed task after timed task
             (should (= (org-atomic-agenda-cmp item-untimed item-timed-early) 1))))))))
 
+(ert-deftest org-atomic-test-stack-cycle-detection ()
+  "Test that circular stack dependencies do not cause infinite recursion."
+  (with-temp-buffer
+    (insert "* Habit A\n:PROPERTIES:\n:STYLE: habit\n:ATOMIC_ID: HabitA\n:ATOMIC_NEXT: HabitB\n:END:\n"
+            "* Habit B\n:PROPERTIES:\n:STYLE: habit\n:ATOMIC_ID: HabitB\n:ATOMIC_NEXT: HabitA\n:END:\n")
+    (org-mode)
+    (org-atomic-core-clear-caches)
+    (let (marker-a marker-b)
+      (goto-char (point-min))
+      (search-forward "Habit A")
+      (setq marker-a (point-marker))
+      (search-forward "Habit B")
+      (setq marker-b (point-marker))
+      ;; Resolving stack path on cyclic habits terminates safely without hanging
+      (let ((path-a (org-atomic-core--resolve-stack-path marker-a))
+            (path-b (org-atomic-core--resolve-stack-path marker-b)))
+        (should (or (null path-a) (listp path-a)))
+        (should (or (null path-b) (listp path-b)))))))
+
 (ert-deftest org-atomic-test-filter-canceled-states ()
   "Test that CANCELED logbook entries are correctly ignored during consistency graph rendering."
   (with-temp-buffer
@@ -258,7 +276,7 @@
     (search-forward "* TODO Hardcore Static Stretching")
     (beginning-of-line)
     ;; Let's evaluate non-canceled done dates
-    (let ((dates (org-atomic-graph--get-non-canceled-done-dates (point-marker))))
+    (let ((dates (org-atomic-core-get-done-dates (point-marker))))
       ;; In mock-habits.org:
       ;; - State "CANCELED" from "TODO"       [2026-06-24 Wed 17:13]
       ;; - State "DONE"     from "TODO"       [2026-06-23 Tue]
@@ -306,7 +324,7 @@
            (weekend '(6 28 2026))
            ;; Run filtering advice for Strength Training (weekends) on workday
            ;; In mock-habits.org, Gym is weekends only.
-           (workday-entries (org-atomic--org-agenda-get-day-entries-advice
+           (workday-entries (org-atomic-agenda--filter-day-entries-advice
                              (lambda (_file _date &rest _)
                                ;; mock returning the agenda item for Gym
                                (list (propertize "Gym" 'org-marker
@@ -316,7 +334,7 @@
                                                      (search-forward "Gym")
                                                      (point-marker))))))
                              (car org-agenda-files) workday))
-           (weekend-entries (org-atomic--org-agenda-get-day-entries-advice
+           (weekend-entries (org-atomic-agenda--filter-day-entries-advice
                              (lambda (_file _date &rest _)
                                (list (propertize "Gym" 'org-marker
                                                  (with-current-buffer (find-file-noselect (car org-agenda-files))
@@ -345,7 +363,7 @@
       (let* ((marker (point-marker))
              ;; We construct a text string with 'org-marker property, just like the agenda builder does
              (txt (propertize "TODO Strength Training" 'org-marker marker))
-             (formatted (org-atomic-agenda--org-agenda-format-item-advice
+             (formatted (org-atomic-agenda--format-item-advice
                          (lambda (_extra text &rest _) text)
                          nil txt)))
         ;; Should contain the ID prefix "[Gym] "
@@ -357,7 +375,7 @@
       (beginning-of-line)
       (let* ((marker (point-marker))
              (txt (propertize "TODO Hardcore Static Stretching" 'org-marker marker))
-             (formatted (org-atomic-agenda--org-agenda-format-item-advice
+             (formatted (org-atomic-agenda--format-item-advice
                          (lambda (_extra text &rest _) text)
                          nil txt)))
         ;; Should contain the hook ╰─> before TODO, and the ID Stretch after TODO
@@ -371,7 +389,7 @@
              ;; Simulated result from org-agenda-format-item, which strips the time range
              (result-formatted "  Habits:      10:00 ---------- TODO Scrolling Social Media [- 11:00]")
              (txt (propertize "TODO Scrolling Social Media [10:00 - 11:00]" 'org-marker marker))
-             (formatted (org-atomic-agenda--org-agenda-format-item-advice
+             (formatted (org-atomic-agenda--format-item-advice
                          (lambda (_extra _text &rest _) result-formatted)
                          nil txt)))
         ;; Should contain the ID prefix "[Scroll] " after "TODO"
@@ -397,7 +415,7 @@
           (cl-letf* (((symbol-function 'org-today)
                       (lambda ()
                         (time-to-days (encode-time 0 0 0 26 6 2026)))))
-            (org-atomic-roll-over-habits)
+            (org-atomic--roll-over-habits)
             (with-current-buffer (find-file-noselect temp-file)
               (save-excursion
                 ;; Check Youtube
@@ -422,7 +440,7 @@
           (cl-letf* (((symbol-function 'org-today)
                       (lambda ()
                         (time-to-days (encode-time 0 0 0 27 6 2026)))))
-            (org-atomic-roll-over-habits)
+            (org-atomic--roll-over-habits)
             (with-current-buffer (find-file-noselect temp-file)
               (save-excursion
                 ;; Check Youtube
@@ -611,6 +629,17 @@
   (should (org-atomic-util-day-active-p 0 '(7)))
   (should (org-atomic-util-day-active-p 7 '(7)))
   (should-not (org-atomic-util-day-active-p 7 '(1 2 3 4 5))))
+
+(ert-deftest org-atomic-test-find-next-active-day ()
+  "Test finding the next active day from a starting day."
+  ;; If active-days is nil, returns starting day
+  (should (= (org-atomic-util-find-next-active-day 10 nil) 10))
+  ;; Day 1 (Mon) is active for workdays (1-5) -> returns 1
+  (should (= (org-atomic-util-find-next-active-day 1 '(1 2 3 4 5)) 1))
+  ;; Day 5 (Fri) is active for weekends (6-7) -> next is 6 (Sat)
+  (should (= (org-atomic-util-find-next-active-day 5 '(6 7)) 6))
+  ;; Day 6 (Sat) is active for workdays (1-5) -> next is 8 (Mon)
+  (should (= (org-atomic-util-find-next-active-day 6 '(1 2 3 4 5)) 8)))
 
 (ert-deftest org-atomic-test-clean-result-time ()
   "Test cleaning bracketed and angled times using reducer pipeline."

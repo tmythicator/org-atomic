@@ -3,7 +3,7 @@
 ;; Copyright (C) 2026 Alexandr Timchenko
 ;; Author: Alexandr Timchenko <atimchenko92@gmail.com>
 ;; Assisted-by: Gemini:gemini-3.5-flash
-;; Version: 1.4.0
+;; Version: 1.4.1
 ;; Package-Requires: ((emacs "27.1") (org "9.3"))
 ;; URL: https://github.com/tmythicator/org-atomic
 ;; License: GPL-3.0-or-later
@@ -14,9 +14,8 @@
 
 ;;; Code:
 
-(require 'cl-lib)
+(require 'pcase)
 (require 'subr-x)
-(require 'calendar)
 (require 'org)
 (require 'org-agenda)
 (require 'seq)
@@ -174,8 +173,7 @@ ACC is a tuple of (current longest temp broken)."
          (why (org-atomic-core-habit-why habit))
 
          ;; Stats
-         (done-dates
-          (org-atomic-graph--get-non-canceled-done-dates marker))
+         (done-dates (org-atomic-core-get-done-dates marker))
          (today (org-today))
          (rates
           (org-atomic-stats--calculate-rates
