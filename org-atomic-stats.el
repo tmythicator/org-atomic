@@ -3,7 +3,7 @@
 ;; Copyright (C) 2026 Alexandr Timchenko
 ;; Author: Alexandr Timchenko <atimchenko92@gmail.com>
 ;; Assisted-by: Gemini:gemini-3.5-flash
-;; Version: 1.3.1
+;; Version: 1.4.0
 ;; Package-Requires: ((emacs "27.1") (org "9.3"))
 ;; URL: https://github.com/tmythicator/org-atomic
 ;; License: GPL-3.0-or-later
@@ -83,12 +83,10 @@ ACC is a tuple of (current longest temp broken)."
       ((active-days (org-atomic-core-habit-days habit-struct))
        (today (org-today))
        (today-active-p
-        (or (null active-days)
-            (member (org-atomic-util--day-to-dow today) active-days)))
+        (org-atomic-util-day-active-p today active-days))
        (today-success-p
         (org-atomic-core-habit-success-p
          habit-struct (member today done-dates)))
-
        ;; If today is an active day but not yet successful, start evaluating from yesterday
        (start-eval-day
         (if (and today-active-p (not today-success-p))
@@ -100,9 +98,7 @@ ACC is a tuple of (current longest temp broken)."
           (- today 365)))
        (days-seq
         (seq-filter
-         (lambda (d)
-           (let ((weekday (org-atomic-util--day-to-dow d)))
-             (or (null active-days) (member weekday active-days))))
+         (lambda (d) (org-atomic-util-day-active-p d active-days))
          (number-sequence start-eval-day min-day -1)))
        (result
         (seq-reduce
@@ -125,8 +121,7 @@ ACC is a tuple of (current longest temp broken)."
          (active-days-seq
           (seq-filter
            (lambda (d)
-             (let ((weekday (org-atomic-util--day-to-dow d)))
-               (or (null active-days) (member weekday active-days))))
+             (org-atomic-util-day-active-p d active-days))
            days-seq))
          (active-count (length active-days-seq))
          (success-count
@@ -234,19 +229,31 @@ ACC is a tuple of (current longest temp broken)."
                (propertize "Why:" 'face 'org-atomic-stats-label-face)
                why))
      ;; Rules
-     (let ((rules (org-atomic-core-habit-strategies habit)))
-       (when rules
-         (concat
-          (mapconcat (lambda (rule)
-                       (format "  %-18s %s\n"
-                               (propertize
-                                (concat (car rule) ":")
-                                'face 'org-atomic-stats-label-face)
-                               (cdr rule)))
-                     rules
-                     "")
-          "\n")))
+     (when-let* ((rules (org-atomic-core-habit-strategies habit)))
+       (concat
+        (mapconcat (pcase-lambda (`(,label . ,text))
+                     (format "  %-18s %s\n"
+                             (propertize (concat label ":")
+                                         'face
+                                         'org-atomic-stats-label-face)
+                             text))
+                   rules
+                   "")
+        "\n"))
      "\n")))
+
+(defun org-atomic-stats--render-section (title habits range)
+  "Render a stats section with TITLE for HABITS over RANGE days."
+  (when habits
+    (concat
+     (propertize (format "  %s\n\n" title)
+                 'face
+                 'org-atomic-stats-subheader-face)
+     (mapconcat (pcase-lambda (`(,habit ,marker . ,_))
+                  (org-atomic-stats--format-habit-card
+                   habit marker range))
+                habits
+                ""))))
 
 (defun org-atomic-stats--render ()
   "Render the Org-Atomic stats page."
@@ -276,29 +283,11 @@ ACC is a tuple of (current longest temp broken)."
                    total-habits total-good total-bad)
            (format "    Tracking Range: last %d days\n\n" range)))
          (good-section
-          (when good-habits
-            (concat
-             (propertize "  GOOD HABITS\n\n"
-                         'face
-                         'org-atomic-stats-subheader-face)
-             (string-join (seq-map
-                           (lambda (item)
-                             (org-atomic-stats--format-habit-card
-                              (nth 0 item) (nth 1 item) range))
-                           good-habits)
-                          ""))))
+          (org-atomic-stats--render-section
+           "GOOD HABITS" good-habits range))
          (bad-section
-          (when bad-habits
-            (concat
-             (propertize "  BAD HABITS\n\n"
-                         'face
-                         'org-atomic-stats-subheader-face)
-             (string-join (seq-map
-                           (lambda (item)
-                             (org-atomic-stats--format-habit-card
-                              (nth 0 item) (nth 1 item) range))
-                           bad-habits)
-                          "")))))
+          (org-atomic-stats--render-section
+           "BAD HABITS" bad-habits range)))
     (insert (concat banner summary good-section bad-section))
     (goto-char (point-min))))
 

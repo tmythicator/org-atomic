@@ -3,7 +3,7 @@
 ;; Copyright (C) 2026 Alexandr Timchenko
 ;; Author: Alexandr Timchenko <atimchenko92@gmail.com>
 ;; Assisted-by: Gemini:gemini-3.5-flash
-;; Version: 1.3.1
+;; Version: 1.4.0
 ;; Package-Requires: ((emacs "27.1") (org "9.3"))
 ;; URL: https://github.com/tmythicator/org-atomic
 ;; License: GPL-3.0-or-later
@@ -15,6 +15,8 @@
 
 (require 'cl-lib)
 (require 'subr-x)
+(require 'seq)
+(require 'pcase)
 (require 'calendar)
 (require 'org)
 
@@ -125,6 +127,19 @@ heading."
    (t
     (org-atomic-util--get-marker-from-context))))
 
+(defun org-atomic-util-walk-property-intervals
+    (prop fn &optional start end)
+  "Iterate over intervals of text property PROP from START to END, calling FN.
+FN is called with (START-POS END-POS PROPERTY-VALUE) for each non-nil interval."
+  (let ((pos (or start (point-min)))
+        (limit (or end (point-max))))
+    (while (< pos limit)
+      (let ((next (next-single-property-change pos prop nil limit))
+            (val (get-text-property pos prop)))
+        (when val
+          (funcall fn pos next val))
+        (setq pos next)))))
+
 
 ;;; ============================================================================
 ;;; Heading Resolution & Context
@@ -164,42 +179,41 @@ and fallback to a regex search backward if that fails."
 ;;; Day & Time Parsing
 ;;; ============================================================================
 
+(defun org-atomic-util--token-to-dow (tok)
+  "Parse day token TOK into a weekday integer (1=Monday, 7=Sunday).
+Return nil if TOK does not match a valid day number or name."
+  (cond
+   ;; Direct integer
+   ((string-match-p org-atomic-util--day-digit-regexp tok)
+    (string-to-number tok))
+   ;; Day name abbreviations / full names (Mon -> 1, Sun -> 7)
+   (t
+    (let ((day-idx
+           (cl-position
+            (substring tok 0 (min 3 (length tok)))
+            org-atomic-util-weekday-names
+            :test #'string=)))
+      (when day-idx
+        (1+ day-idx))))))
+
 (defun org-atomic-util--parse-days (days-str)
   "Parse DAYS-STR into a list of day integers (1=Monday, 7=Sunday).
 Accepts custom day group names from `org-atomic-day-groups',
 comma/space separated day numbers, or names (e.g. \"mon,tue\" or \"Monday\")."
-  (when (and days-str (not (string-empty-p (string-trim days-str))))
-    (let* ((clean-str (downcase (string-trim days-str)))
+  (when-let* ((trimmed (and days-str (string-trim days-str)))
+              ((not (string-empty-p trimmed))))
+    (let* ((clean-str (downcase trimmed))
            (group-match
             (cdr
              (assoc
               clean-str
               (and (boundp 'org-atomic-core-day-groups)
                    org-atomic-core-day-groups)))))
-      (if group-match
-          group-match
-        (let ((tokens
-               (split-string
-                clean-str
-                org-atomic-util--day-separator-regexp t)))
+      (or group-match
           (thread-last
-           (mapcar
-            (lambda (tok)
-              (cond
-               ;; Direct integer
-               ((string-match-p org-atomic-util--day-digit-regexp tok)
-                (string-to-number tok))
-               ;; Day name abbreviations / full names (Mon -> 1, Sun -> 7)
-               (t
-                (let ((day-idx
-                       (cl-position
-                        (substring tok 0 (min 3 (length tok)))
-                        org-atomic-util-weekday-names
-                        :test #'string=)))
-                  (when day-idx
-                    (1+ day-idx))))))
-            tokens)
-           (delq nil)))))))
+           (split-string clean-str
+                         org-atomic-util--day-separator-regexp t)
+           (seq-map #'org-atomic-util--token-to-dow) (delq nil))))))
 
 (defun org-atomic-util--parse-time-str-to-int (str)
   "Parse a time string (HH:MM) from STR into an integer HHMM."
@@ -221,13 +235,18 @@ TIME can be an absolute day number (integer) or a Lisp time value."
 
 (defun org-atomic-util--day-to-dow (day-or-cal-dow)
   "Convert DAY-OR-CAL-DOW to standard weekday index (1=Monday, 7=Sunday)."
-  (let ((d
-         (if (>= day-or-cal-dow 7)
-             (mod day-or-cal-dow 7)
-           day-or-cal-dow)))
-    (if (= d 0)
-        7
-      d)))
+  (pcase (mod day-or-cal-dow 7)
+    (0 7)
+    (dow dow)))
+
+(defun org-atomic-util-day-active-p (day-or-time active-days)
+  "Return non-nil if DAY-OR-TIME is an active weekday according to ACTIVE-DAYS.
+If ACTIVE-DAYS is nil, returns non-nil (active every day)."
+  (or (null active-days)
+      (let* ((day-num
+              (org-atomic-util--time-to-day-number day-or-time))
+             (dow (org-atomic-util--day-to-dow day-num)))
+        (memq dow active-days))))
 
 
 ;;; ============================================================================
@@ -250,20 +269,20 @@ TIME can be an absolute day number (integer) or a Lisp time value."
       org-atomic-util--time-range-angle-regexp "")
      (org-trim))))
 
+(defconst org-atomic-util--time-cleanup-patterns
+  (list
+   org-atomic-util--time-range-bracket-regexp
+   org-atomic-util--time-duration-bracket-regexp
+   org-atomic-util--time-range-angle-regexp
+   org-atomic-util--time-duration-angle-regexp)
+  "List of regexes matching time ranges and duration expressions.")
+
 (defun org-atomic-util--clean-result-time (str)
   "Remove bracketed or angled time ranges and their remnants from STR."
-  (thread-last
-   str
-   (replace-regexp-in-string
-    (concat "[ \t]*" org-atomic-util--time-range-bracket-regexp) "")
-   (replace-regexp-in-string
-    (concat "[ \t]*" org-atomic-util--time-duration-bracket-regexp)
-    "")
-   (replace-regexp-in-string
-    (concat "[ \t]*" org-atomic-util--time-range-angle-regexp) "")
-   (replace-regexp-in-string
-    (concat "[ \t]*" org-atomic-util--time-duration-angle-regexp)
-    "")))
+  (seq-reduce
+   (lambda (acc pat)
+     (replace-regexp-in-string (concat "[ \t]*" pat) "" acc))
+   org-atomic-util--time-cleanup-patterns str))
 
 
 ;;; ============================================================================
@@ -273,21 +292,18 @@ TIME can be an absolute day number (integer) or a Lisp time value."
 (defun org-atomic-util--cmp-number-with-nil (a b)
   "Compare numbers A and B, treating nil as larger than any number.
 Returns -1 if A < B, 1 if A > B, or nil if they are equal or both nil."
-  (cond
-   ((and a b)
-    (cond
-     ((< a b)
-      -1)
-     ((> a b)
-      1)
-     (t
-      nil)))
-   (a
-    -1)
-   (b
-    1)
-   (t
-    nil)))
+  (pcase (cons a b)
+    (`(nil . nil) nil)
+    (`(,_ . nil) -1)
+    (`(nil . ,_) 1)
+    (`(,na . ,nb)
+     (cond
+      ((< na nb)
+       -1)
+      ((> na nb)
+       1)
+      (t
+       nil)))))
 
 (defun org-atomic-util-calculate-percentage
     (success-count active-count)

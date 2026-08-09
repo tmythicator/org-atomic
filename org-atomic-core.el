@@ -3,7 +3,7 @@
 ;; Copyright (C) 2026 Alexandr Timchenko
 ;; Author: Alexandr Timchenko <atimchenko92@gmail.com>
 ;; Assisted-by: Gemini:gemini-3.5-flash
-;; Version: 1.3.1
+;; Version: 1.4.0
 ;; Package-Requires: ((emacs "27.1") (org "9.3"))
 ;; URL: https://github.com/tmythicator/org-atomic
 ;; License: GPL-3.0-or-later
@@ -142,6 +142,30 @@ Returns the `point-marker' if found, otherwise nil."
             (when (and val (string= (string-trim val) value))
               (throw 'found (point-marker)))))))))
 
+(defun org-atomic-core--agenda-buffers (&optional open)
+  "Return unique live buffers visiting `org-agenda-files'.
+If OPEN is non-nil, open agenda files using `find-file-noselect'."
+  (let ((fetch
+         (if open
+             #'find-file-noselect
+           #'find-buffer-visiting)))
+    (thread-last
+     (and (boundp 'org-agenda-files) (org-agenda-files))
+     (seq-map
+      (lambda (f)
+        (when (file-exists-p f)
+          (funcall fetch f))))
+     (delq nil) (seq-filter #'buffer-live-p) (seq-uniq))))
+
+(defun org-atomic-core--candidate-buffers ()
+  "Return unique live candidate buffers for habit property lookups."
+  (let ((bufs (org-atomic-core--agenda-buffers)))
+    (if (and (buffer-live-p (current-buffer))
+             (with-current-buffer (current-buffer)
+               (derived-mode-p 'org-mode)))
+        (seq-uniq (cons (current-buffer) bufs))
+      bufs)))
+
 (defun org-atomic-core--find-heading-by-property
     (property value &optional cache)
   "Find the marker of the heading where PROPERTY equals VALUE.
@@ -149,22 +173,13 @@ Uses CACHE (a hash table) if provided."
   (if (and cache (gethash value cache))
       (gethash value cache)
     (let* ((value-trimmed (string-trim value))
-           (buffers
-            (cons
-             (current-buffer)
-             (delq
-              (current-buffer)
-              (delq
-               nil
-               (mapcar #'find-buffer-visiting org-agenda-files)))))
            (found-marker
-            (cl-some
+            (seq-some
              (lambda (buf)
-               (when (buffer-live-p buf)
-                 (with-current-buffer buf
-                   (org-atomic-core--scan-buffer-for-property
-                    property value-trimmed))))
-             buffers)))
+               (with-current-buffer buf
+                 (org-atomic-core--scan-buffer-for-property
+                  property value-trimmed)))
+             (org-atomic-core--candidate-buffers))))
       (when (and cache found-marker)
         (puthash value found-marker cache))
       found-marker)))
@@ -217,28 +232,31 @@ Uses CACHE (a hash table) if provided."
                   (org-atomic-core--get-time-at-marker
                    root-marker))))))))
 
+(defun org-atomic-core--resolve-stack-path (marker &optional visited)
+  "Resolve the list of ancestor ATOMIC_IDs leading up to MARKER.
+VISITED tracks seen IDs to detect cycles and prevent infinite loops."
+  (org-atomic-util-with-heading-at-marker
+   marker
+   (when-let* ((id (org-entry-get (point) "ATOMIC_ID"))
+               (id-trimmed (string-trim id))
+               ((not (member id-trimmed visited))))
+     (let ((pred-marker
+            (org-atomic-core--find-predecessor-by-next-id
+             id-trimmed)))
+       (if pred-marker
+           (append
+            (org-atomic-core--resolve-stack-path pred-marker
+                                                 (cons
+                                                  id-trimmed visited))
+            (list id-trimmed))
+         (list id-trimmed))))))
+
 (defun org-atomic-core--get-stack-key (marker &optional visited)
   "Get the hierarchical stack key for the habit at MARKER.
 VISITED is a list of already visited IDs to prevent infinite loops."
-  (org-atomic-util-with-heading-at-marker
-   marker
-   (let ((id (org-entry-get (point) "ATOMIC_ID")))
-     (when id
-       (let* ((id-trimmed (string-trim id))
-              (pred-marker
-               (unless (member id-trimmed visited)
-                 (org-atomic-core--find-predecessor-by-next-id
-                  id-trimmed))))
-         (cond
-          ;; Base case: no predecessor or cycle
-          ((or (null pred-marker) (member id-trimmed visited))
-           id-trimmed)
-          ;; Recursive case: resolve parent stack key
-          (t
-           (concat
-            (org-atomic-core--get-stack-key pred-marker
-                                            (cons id-trimmed visited))
-            "/" id-trimmed))))))))
+  (when-let* ((path
+               (org-atomic-core--resolve-stack-path marker visited)))
+    (string-join path "/")))
 
 (defun org-atomic-core-habit-bad-p (habit)
   "Return non-nil if HABIT is configured as a bad habit."
@@ -268,7 +286,9 @@ VISITED is a list of already visited IDs to prevent infinite loops."
          ("Attractive" . ,(org-atomic-core-habit-attractive habit))
          ("Easy" . ,(org-atomic-core-habit-easy habit))
          ("Satisfying" . ,(org-atomic-core-habit-satisfying habit))))
-     (cl-remove-if-not #'cdr))))
+     (seq-filter
+      (pcase-lambda (`(,_ . ,val))
+        (and val (not (string-empty-p (string-trim val)))))))))
 
 (provide 'org-atomic-core)
 ;;; org-atomic-core.el ends here

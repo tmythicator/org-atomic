@@ -3,7 +3,7 @@
 ;; Copyright (C) 2026 Alexandr Timchenko
 ;; Author: Alexandr Timchenko <atimchenko92@gmail.com>
 ;; Assisted-by: Gemini:gemini-3.5-flash
-;; Version: 1.3.1
+;; Version: 1.4.0
 ;; License: GPL-3.0-or-later
 
 ;;; Commentary:
@@ -550,6 +550,93 @@
     (should (null (org-atomic-core--parse-property-mapping '("ATOMIC_WHY" . :why) props)))
     ;; 4. Missing mapping (should return nil)
     (should (null (org-atomic-core--parse-property-mapping '("ATOMIC_NEXT" . :next) props)))))
+
+(ert-deftest org-atomic-test-graph-helpers ()
+  "Test pure helper functions in org-atomic-graph."
+  ;; 1. Status classification
+  (should (eq (org-atomic-graph--status-kind 'good-done) :success))
+  (should (eq (org-atomic-graph--status-kind 'bad-avoided) :success))
+  (should (eq (org-atomic-graph--status-kind 'good-missed) :missed))
+  (should (eq (org-atomic-graph--status-kind 'bad-done) :missed))
+  (should (eq (org-atomic-graph--status-kind 'skipped) :ignored))
+  (should (eq (org-atomic-graph--status-kind 'future) :ignored))
+  (should (eq (org-atomic-graph--status-kind 'unknown) :ignored))
+
+  ;; 2. Single-pass percentage calculations
+  (should (= (org-atomic-graph--calculate-history-percentage nil) 0))
+  (should (= (org-atomic-graph--calculate-history-percentage '(skipped skipped future)) 0))
+  (should (= (org-atomic-graph--calculate-history-percentage '(good-done bad-avoided)) 100))
+  (should (= (org-atomic-graph--calculate-history-percentage '(good-missed bad-done)) 0))
+  (should (= (org-atomic-graph--calculate-history-percentage '(good-done good-missed skipped)) 50))
+  (should (= (org-atomic-graph--calculate-history-percentage
+              '(good-done good-missed bad-avoided bad-done skipped future))
+             50))
+
+  ;; 3. Character propertization
+  (let ((char-done (org-atomic-graph--format-day-char 'good-done))
+        (char-missed (org-atomic-graph--format-day-char 'good-missed))
+        (char-avoided (org-atomic-graph--format-day-char 'bad-avoided))
+        (char-bad-done (org-atomic-graph--format-day-char 'bad-done))
+        (char-skipped (org-atomic-graph--format-day-char 'skipped))
+        (char-other (org-atomic-graph--format-day-char 'future)))
+    (should (string= (substring-no-properties char-done) (string org-atomic-graph-done-char)))
+    (should (eq (get-text-property 0 'face char-done) 'org-atomic-graph-done-face))
+
+    (should (string= (substring-no-properties char-missed) (string org-atomic-graph-missed-char)))
+    (should (eq (get-text-property 0 'face char-missed) 'org-atomic-graph-missed-face))
+
+    (should (string= (substring-no-properties char-avoided) (string org-atomic-graph-missed-char)))
+    (should (eq (get-text-property 0 'face char-avoided) 'org-atomic-graph-done-face))
+
+    (should (string= (substring-no-properties char-bad-done) (string org-atomic-graph-done-char)))
+    (should (eq (get-text-property 0 'face char-bad-done) 'org-atomic-graph-missed-face))
+
+    (should (string= (substring-no-properties char-skipped) (string org-atomic-graph-skipped-char)))
+    (should (eq (get-text-property 0 'face char-skipped) 'org-atomic-graph-skipped-face))
+
+    (should (string= (substring-no-properties char-other) " "))
+    (should (eq (get-text-property 0 'face char-other) 'org-atomic-graph-skipped-face))))
+
+(ert-deftest org-atomic-test-day-active-p ()
+  "Test pure predicate org-atomic-util-day-active-p."
+  ;; nil active-days -> always active
+  (should (org-atomic-util-day-active-p 1 nil))
+  (should (org-atomic-util-day-active-p 7 nil))
+  ;; restricted active-days (workdays: 1-5)
+  (should (org-atomic-util-day-active-p 1 '(1 2 3 4 5)))
+  (should (org-atomic-util-day-active-p 5 '(1 2 3 4 5)))
+  (should-not (org-atomic-util-day-active-p 6 '(1 2 3 4 5)))
+  (should-not (org-atomic-util-day-active-p 7 '(1 2 3 4 5)))
+  ;; day-to-dow modulo behavior: 0 and 7 are Sunday
+  (should (org-atomic-util-day-active-p 0 '(7)))
+  (should (org-atomic-util-day-active-p 7 '(7)))
+  (should-not (org-atomic-util-day-active-p 7 '(1 2 3 4 5))))
+
+(ert-deftest org-atomic-test-clean-result-time ()
+  "Test cleaning bracketed and angled times using reducer pipeline."
+  (should (string= (org-atomic-util--clean-result-time "Task [07:30 - 08:30] details")
+                   "Task details"))
+  (should (string= (org-atomic-util--clean-result-time "Task <10:00> [- 09:00] more")
+                   "Task more"))
+  (should (string= (org-atomic-util--clean-result-time "Untimed task")
+                   "Untimed task")))
+
+(ert-deftest org-atomic-test-candidate-buffers ()
+  "Test agenda and candidate buffer resolution."
+  (let* ((temp-file (make-temp-file "org-atomic-test-cand-" nil ".org"))
+         (org-agenda-files (list temp-file)))
+    (unwind-protect
+        (progn
+          (with-temp-file temp-file
+            (insert "* Test Habit\n:PROPERTIES:\n:STYLE: habit\n:END:\n"))
+          ;; agenda-buffers with open=t returns a live visiting buffer
+          (let ((buffers (org-atomic-core--agenda-buffers t)))
+            (should (seq-some
+                     (lambda (b)
+                       (equal (buffer-file-name b) (file-truename temp-file)))
+                     buffers))))
+      (when (file-exists-p temp-file)
+        (delete-file temp-file)))))
 
 (provide 'org-atomic-test)
 ;;; org-atomic-test.el ends here
