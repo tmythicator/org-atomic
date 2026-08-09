@@ -149,17 +149,15 @@ the past to the current day (or the next active day)."
   (interactive)
   (when (and org-atomic-mode (not org-atomic--in-rollover))
     (let ((org-atomic--in-rollover t))
-      (thread-last
-       (org-agenda-files) (seq-filter #'file-exists-p)
-       (seq-do
-        (lambda (file)
-          (with-current-buffer (find-file-noselect file)
-            (let ((was-modified (buffer-modified-p)))
-              (org-map-entries
-               #'org-atomic--roll-over-single-habit
-               "+STYLE=\"habit\"")
-              (when (and (not was-modified) (buffer-modified-p))
-                (save-buffer))))))))))
+      (seq-do
+       (lambda (buf)
+         (with-current-buffer buf
+           (let ((was-modified (buffer-modified-p)))
+             (org-map-entries
+              #'org-atomic--roll-over-single-habit "+STYLE=\"habit\"")
+             (when (and (not was-modified) (buffer-modified-p))
+               (save-buffer)))))
+       (org-atomic-core--agenda-buffers t)))))
 
 (defun org-atomic--roll-over-single-habit ()
   "Roll over the habit at point to today if it is overdue."

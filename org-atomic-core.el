@@ -142,6 +142,30 @@ Returns the `point-marker' if found, otherwise nil."
             (when (and val (string= (string-trim val) value))
               (throw 'found (point-marker)))))))))
 
+(defun org-atomic-core--agenda-buffers (&optional open)
+  "Return unique live buffers visiting `org-agenda-files'.
+If OPEN is non-nil, open agenda files using `find-file-noselect'."
+  (let ((fetch
+         (if open
+             #'find-file-noselect
+           #'find-buffer-visiting)))
+    (thread-last
+     (and (boundp 'org-agenda-files) (org-agenda-files))
+     (seq-map
+      (lambda (f)
+        (when (file-exists-p f)
+          (funcall fetch f))))
+     (delq nil) (seq-filter #'buffer-live-p) (seq-uniq))))
+
+(defun org-atomic-core--candidate-buffers ()
+  "Return unique live candidate buffers for habit property lookups."
+  (let ((bufs (org-atomic-core--agenda-buffers)))
+    (if (and (buffer-live-p (current-buffer))
+             (with-current-buffer (current-buffer)
+               (derived-mode-p 'org-mode)))
+        (seq-uniq (cons (current-buffer) bufs))
+      bufs)))
+
 (defun org-atomic-core--find-heading-by-property
     (property value &optional cache)
   "Find the marker of the heading where PROPERTY equals VALUE.
@@ -149,22 +173,13 @@ Uses CACHE (a hash table) if provided."
   (if (and cache (gethash value cache))
       (gethash value cache)
     (let* ((value-trimmed (string-trim value))
-           (buffers
-            (cons
-             (current-buffer)
-             (delq
-              (current-buffer)
-              (delq
-               nil
-               (mapcar #'find-buffer-visiting org-agenda-files)))))
            (found-marker
-            (cl-some
+            (seq-some
              (lambda (buf)
-               (when (buffer-live-p buf)
-                 (with-current-buffer buf
-                   (org-atomic-core--scan-buffer-for-property
-                    property value-trimmed))))
-             buffers)))
+               (with-current-buffer buf
+                 (org-atomic-core--scan-buffer-for-property
+                  property value-trimmed)))
+             (org-atomic-core--candidate-buffers))))
       (when (and cache found-marker)
         (puthash value found-marker cache))
       found-marker)))

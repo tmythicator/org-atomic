@@ -621,5 +621,22 @@
   (should (string= (org-atomic-util--clean-result-time "Untimed task")
                    "Untimed task")))
 
+(ert-deftest org-atomic-test-candidate-buffers ()
+  "Test agenda and candidate buffer resolution."
+  (let* ((temp-file (make-temp-file "org-atomic-test-cand-" nil ".org"))
+         (org-agenda-files (list temp-file)))
+    (unwind-protect
+        (progn
+          (with-temp-file temp-file
+            (insert "* Test Habit\n:PROPERTIES:\n:STYLE: habit\n:END:\n"))
+          ;; agenda-buffers with open=t returns a live visiting buffer
+          (let ((buffers (org-atomic-core--agenda-buffers t)))
+            (should (seq-some
+                     (lambda (b)
+                       (equal (buffer-file-name b) (file-truename temp-file)))
+                     buffers))))
+      (when (file-exists-p temp-file)
+        (delete-file temp-file)))))
+
 (provide 'org-atomic-test)
 ;;; org-atomic-test.el ends here
