@@ -229,18 +229,17 @@ ACC is a tuple of (current longest temp broken)."
                (propertize "Why:" 'face 'org-atomic-stats-label-face)
                why))
      ;; Rules
-     (let ((rules (org-atomic-core-habit-strategies habit)))
-       (when rules
-         (concat
-          (mapconcat (lambda (rule)
-                       (format "  %-18s %s\n"
-                               (propertize
-                                (concat (car rule) ":")
-                                'face 'org-atomic-stats-label-face)
-                               (cdr rule)))
-                     rules
-                     "")
-          "\n")))
+     (when-let* ((rules (org-atomic-core-habit-strategies habit)))
+       (concat
+        (mapconcat (pcase-lambda (`(,label . ,text))
+                     (format "  %-18s %s\n"
+                             (propertize (concat label ":")
+                                         'face
+                                         'org-atomic-stats-label-face)
+                             text))
+                   rules
+                   "")
+        "\n"))
      "\n")))
 
 (defun org-atomic-stats--render ()
