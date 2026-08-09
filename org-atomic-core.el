@@ -232,28 +232,31 @@ Uses CACHE (a hash table) if provided."
                   (org-atomic-core--get-time-at-marker
                    root-marker))))))))
 
+(defun org-atomic-core--resolve-stack-path (marker &optional visited)
+  "Resolve the list of ancestor ATOMIC_IDs leading up to MARKER.
+VISITED tracks seen IDs to detect cycles and prevent infinite loops."
+  (org-atomic-util-with-heading-at-marker
+   marker
+   (when-let* ((id (org-entry-get (point) "ATOMIC_ID"))
+               (id-trimmed (string-trim id))
+               ((not (member id-trimmed visited))))
+     (let ((pred-marker
+            (org-atomic-core--find-predecessor-by-next-id
+             id-trimmed)))
+       (if pred-marker
+           (append
+            (org-atomic-core--resolve-stack-path pred-marker
+                                                 (cons
+                                                  id-trimmed visited))
+            (list id-trimmed))
+         (list id-trimmed))))))
+
 (defun org-atomic-core--get-stack-key (marker &optional visited)
   "Get the hierarchical stack key for the habit at MARKER.
 VISITED is a list of already visited IDs to prevent infinite loops."
-  (org-atomic-util-with-heading-at-marker
-   marker
-   (let ((id (org-entry-get (point) "ATOMIC_ID")))
-     (when id
-       (let* ((id-trimmed (string-trim id))
-              (pred-marker
-               (unless (member id-trimmed visited)
-                 (org-atomic-core--find-predecessor-by-next-id
-                  id-trimmed))))
-         (cond
-          ;; Base case: no predecessor or cycle
-          ((or (null pred-marker) (member id-trimmed visited))
-           id-trimmed)
-          ;; Recursive case: resolve parent stack key
-          (t
-           (concat
-            (org-atomic-core--get-stack-key pred-marker
-                                            (cons id-trimmed visited))
-            "/" id-trimmed))))))))
+  (when-let* ((path
+               (org-atomic-core--resolve-stack-path marker visited)))
+    (string-join path "/")))
 
 (defun org-atomic-core-habit-bad-p (habit)
   "Return non-nil if HABIT is configured as a bad habit."
