@@ -120,7 +120,6 @@ Returns an `org-atomic-habit' plist if the entry is an atomic habit."
 
 (defun org-atomic-core-clear-caches ()
   "Clear all org-atomic-core caches."
-  (interactive)
   (clrhash org-atomic-core--find-id-cache)
   (clrhash org-atomic-core--find-next-cache)
   (clrhash org-atomic-core--time-cache))

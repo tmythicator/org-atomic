@@ -14,9 +14,8 @@
 
 ;;; Code:
 
-(require 'cl-lib)
+(require 'pcase)
 (require 'subr-x)
-(require 'calendar)
 (require 'org)
 (require 'org-agenda)
 (require 'seq)
