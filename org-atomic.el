@@ -40,21 +40,7 @@
 Active status is defined by the `ATOMIC_DAYS' property.  If the property
 is missing, it defaults to active (returns non-nil).
 If DAY-OF-WEEK is non-nil, use that instead of today's day of week."
-  (let* ((habit (org-atomic-core-parse-habit))
-         (active-days (and habit (org-atomic-core-habit-days habit)))
-         (current-dow
-          (or day-of-week
-              (org-atomic-util--day-to-dow
-               (calendar-day-of-week (calendar-current-date))))))
-    (org-atomic-util-day-active-p current-dow active-days)))
-
-(defun org-atomic--org-habit-build-graph-advice (orig-fun &rest args)
-  "Advice to intercept `org-habit-build-graph' and draw an atomic graph.
-ORIG-FUN is the shadowed upstream function, and ARGS contains the standard
-arguments: (HABIT STARTING CURRENT ENDING)."
-  (if-let* ((parsed (org-atomic-core-parse-habit)))
-      (apply #'org-atomic-graph-build (append args (list parsed)))
-    (apply orig-fun args)))
+  (org-atomic-core-active-on-date-p nil day-of-week))
 
 (defun org-atomic--update-scheduled-date (day &optional repeater)
   "Set the SCHEDULED property of the entry at point to DAY.
@@ -93,7 +79,7 @@ If BASE-DAY is nil, it defaults to the entry's currently scheduled day."
             (org-atomic--update-scheduled-date next-day
                                                repeater)))))))
 
-(defun org-atomic--org-auto-repeat-maybe-advice (orig-fun &rest args)
+(defun org-atomic--auto-repeat-maybe-advice (orig-fun &rest args)
   "Around advice for `org-auto-repeat-maybe' to adjust new SCHEDULED date.
 ORIG-FUN is the original function, and ARGS are its arguments."
   (let ((repeated (apply orig-fun args)))
@@ -108,26 +94,6 @@ ORIG-FUN is the original function, and ARGS are its arguments."
                    (org-atomic-core-habit-days habit-struct))
           (org-atomic--reschedule-to-active habit-struct))))
     repeated))
-
-(defun org-atomic-active-on-date-p (item-or-marker date)
-  "Check if ITEM-OR-MARKER is active on DATE (a list of month day year).
-Returns non-nil if active or not an atomic habit with restricted days."
-  (let* ((marker (org-atomic-util--find-marker item-or-marker))
-         (habit (and marker (org-atomic-core-parse-habit marker)))
-         (active-days (and habit (org-atomic-core-habit-days habit)))
-         (dow
-          (org-atomic-util--day-to-dow (calendar-day-of-week date))))
-    (org-atomic-util-day-active-p dow active-days)))
-
-(defun org-atomic--org-agenda-get-day-entries-advice
-    (orig-fun file date &rest args)
-  "Around advice to filter out inactive atomic habits.
-ORIG-FUN is the original function.  FILE is the file to search, DATE is the
-date to scan, and ARGS are additional arguments."
-  (thread-last
-   (apply orig-fun file date args)
-   (seq-filter
-    (lambda (item) (org-atomic-active-on-date-p item date)))))
 
 (defvar org-atomic--in-rollover nil
   "Dynamic variable bound to t to prevent infinite recursion in rollover.")
@@ -169,44 +135,25 @@ the past to the current day (or the next active day)."
         (org-agenda-redo)))))
 
 (defun org-atomic--enable ()
-  "Enable org-atomic advices."
-  (advice-add
-   'org-habit-build-graph
-   :around #'org-atomic--org-habit-build-graph-advice)
-  (advice-add
-   'org-agenda-format-item
-   :around #'org-atomic-agenda--org-agenda-format-item-advice)
+  "Enable org-atomic mode and all sub-modules."
+  (org-atomic-graph--enable)
+  (org-atomic-agenda--enable)
   (advice-add
    'org-auto-repeat-maybe
-   :around #'org-atomic--org-auto-repeat-maybe-advice)
-  (advice-add
-   'org-agenda-get-day-entries
-   :around #'org-atomic--org-agenda-get-day-entries-advice)
+   :around #'org-atomic--auto-repeat-maybe-advice)
   (advice-add
    'org-agenda-prepare-buffers
-   :before #'org-atomic-roll-over-habits)
-  (add-hook
-   'org-agenda-finalize-hook #'org-atomic-agenda-finalize-faces)
-  (org-atomic-agenda--enable-sorting)
+   :before #'org-atomic--roll-over-habits)
   (org-atomic--refresh-agenda))
 
 (defun org-atomic--disable ()
-  "Disable org-atomic advices."
+  "Disable org-atomic mode and all sub-modules."
+  (org-atomic-graph--disable)
+  (org-atomic-agenda--disable)
   (advice-remove
-   'org-habit-build-graph #'org-atomic--org-habit-build-graph-advice)
+   'org-auto-repeat-maybe #'org-atomic--auto-repeat-maybe-advice)
   (advice-remove
-   'org-agenda-format-item
-   #'org-atomic-agenda--org-agenda-format-item-advice)
-  (advice-remove
-   'org-auto-repeat-maybe #'org-atomic--org-auto-repeat-maybe-advice)
-  (advice-remove
-   'org-agenda-get-day-entries
-   #'org-atomic--org-agenda-get-day-entries-advice)
-  (advice-remove
-   'org-agenda-prepare-buffers #'org-atomic-roll-over-habits)
-  (remove-hook
-   'org-agenda-finalize-hook #'org-atomic-agenda-finalize-faces)
-  (org-atomic-agenda--disable-sorting)
+   'org-agenda-prepare-buffers #'org-atomic--roll-over-habits)
   (org-atomic--refresh-agenda))
 
 ;;;###autoload

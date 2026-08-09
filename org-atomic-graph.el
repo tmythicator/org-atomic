@@ -13,7 +13,6 @@
 
 ;;; Code:
 
-(require 'cl-lib)
 (require 'seq)
 (require 'pcase)
 (require 'subr-x)
@@ -267,6 +266,25 @@ If PARSED is a non-nil habit plist, use it; otherwise parse the habit."
              (number-sequence loop-start loop-end))))
       (org-atomic-graph-draw history
                              org-atomic-graph-show-percentage))))
+
+(defun org-atomic-graph--build-graph-advice (orig-fun &rest args)
+  "Advice to intercept `org-habit-build-graph' and draw an atomic graph.
+ORIG-FUN is the shadowed upstream function, and ARGS contains the standard
+arguments: (HABIT STARTING CURRENT ENDING)."
+  (if-let* ((parsed (org-atomic-core-parse-habit)))
+      (apply #'org-atomic-graph-build (append args (list parsed)))
+    (apply orig-fun args)))
+
+(defun org-atomic-graph--enable ()
+  "Enable graph advice for org-habit."
+  (advice-add
+   'org-habit-build-graph
+   :around #'org-atomic-graph--build-graph-advice))
+
+(defun org-atomic-graph--disable ()
+  "Disable graph advice for org-habit."
+  (advice-remove
+   'org-habit-build-graph #'org-atomic-graph--build-graph-advice))
 
 (provide 'org-atomic-graph)
 ;;; org-atomic-graph.el ends here

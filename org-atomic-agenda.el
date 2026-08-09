@@ -13,7 +13,6 @@
 
 ;;; Code:
 
-(require 'cl-lib)
 (require 'seq)
 (require 'pcase)
 (require 'subr-x)
@@ -92,35 +91,41 @@
   "Compare effective times TIME-A and TIME-B."
   (org-atomic-util--cmp-number-with-nil time-a time-b))
 
-(defun org-atomic-agenda--cmp-stacks (key-a key-b)
-  "Compare stack keys KEY-A and KEY-B hierarchically.
-Returns -1 if KEY-A comes before KEY-B under the same root,
-1 if after, or nil if not comparable."
-  (when (and key-a key-b)
-    (let ((root-a (car (split-string key-a "/")))
-          (root-b (car (split-string key-b "/"))))
-      (when (string= root-a root-b)
-        (cond
-         ((string-lessp key-a key-b)
-          -1)
-         ((string-lessp key-b key-a)
-          1))))))
+(defun org-atomic-agenda--cmp-stacks (path-a path-b)
+  "Compare stack PATH-A and PATH-B lists hierarchically.
+Returns -1 if PATH-A precedes PATH-B under the same root, 1 if after, else nil."
+  (when (and (consp path-a)
+             (consp path-b)
+             (string= (car path-a) (car path-b)))
+    (let ((len-a (length path-a))
+          (len-b (length path-b)))
+      (cond
+       ((/= len-a len-b)
+        (if (< len-a len-b)
+            -1
+          1))
+       ((string-lessp (car (last path-a)) (car (last path-b)))
+        -1)
+       ((string-lessp (car (last path-b)) (car (last path-a)))
+        1)))))
 
 (defun org-atomic-agenda-cmp (a b)
   "Custom comparator for sorting atomic habits in the agenda.
 Compares agenda entries A and B by time, then stacks them together."
   (let* ((marker-a (org-atomic-util--find-marker a))
          (marker-b (org-atomic-util--find-marker b))
-         (key-a
-          (and marker-a (org-atomic-core--get-stack-key marker-a)))
-         (key-b
-          (and marker-b (org-atomic-core--get-stack-key marker-b)))
+         (path-a
+          (and marker-a
+               (org-atomic-core--resolve-stack-path marker-a)))
+         (path-b
+          (and marker-b
+               (org-atomic-core--resolve-stack-path marker-b)))
          (time-a
-          (org-atomic-core--get-effective-time a key-a marker-a))
+          (org-atomic-core--get-effective-time a path-a marker-a))
          (time-b
-          (org-atomic-core--get-effective-time b key-b marker-b)))
+          (org-atomic-core--get-effective-time b path-b marker-b)))
     (or (org-atomic-agenda--cmp-time time-a time-b)
-        (org-atomic-agenda--cmp-stacks key-a key-b))))
+        (org-atomic-agenda--cmp-stacks path-a path-b))))
 
 (defvar org-atomic-agenda--saved-sorting-strategy nil
   "Saved value of `org-agenda-sorting-strategy`.")
@@ -162,13 +167,11 @@ Compares agenda entries A and B by time, then stacks them together."
           org-atomic-agenda--saved-sorting-strategy)
     (setq org-atomic-agenda--saved-sorting-strategy nil)))
 
-
-(defun org-atomic-agenda--build-prefix-str (stack-key type)
-  "Build the propertized ID prefix and hierarchy branch for STACK-KEY and TYPE.
+(defun org-atomic-agenda--build-prefix-str (path type)
+  "Build the propertized ID prefix and hierarchy branch for PATH and TYPE.
 Returns a cons cell (INDENT-STR . LABEL-STR)."
-  (let* ((parts (split-string stack-key "/"))
-         (len (length parts))
-         (label (car (last parts)))
+  (let* ((len (length path))
+         (label (car (last path)))
          (face
           (if (string= type "bad")
               'org-atomic-agenda-bad-habit-face
@@ -213,22 +216,40 @@ habit indentation, and ID-STR is the prepended habit identifier."
             (todo-end (match-end 2)))
         (concat
          (substring result 0 todo-start)
-         (or indent-str "")
+         indent-str
          (substring result todo-start todo-end)
-         (or id-str "")
+         id-str
          (substring result todo-end))))
      ((and (not (string-empty-p body-clean))
            (string-match (regexp-quote body-clean) result))
-      (let ((body-start (match-beginning 0)))
+      (let ((pos (match-beginning 0)))
         (concat
-         (substring result 0 body-start)
-         (or indent-str "")
-         (or id-str "")
-         (substring result body-start))))
+         (substring result 0 pos)
+         indent-str
+         id-str
+         (substring result pos))))
      (t
-      (concat result (or indent-str "") (or id-str ""))))))
+      (concat indent-str id-str result)))))
 
-(defun org-atomic-agenda--org-agenda-format-item-advice
+(defun org-atomic-agenda--apply-item-properties (formatted habit txt)
+  "Apply tooltips, help-echo, and metadata text properties to FORMATTED.
+HABIT is the parsed habit object, and TXT is the source heading text."
+  (let ((tooltip (org-atomic-agenda--build-tooltip txt habit)))
+    (when tooltip
+      (add-text-properties 0 (length formatted)
+                           (list
+                            'help-echo
+                            tooltip
+                            'org-atomic-tooltip
+                            tooltip)
+                           formatted)))
+  (when habit
+    (add-text-properties
+     0 (length formatted) (list 'org-atomic-habit t)
+     formatted))
+  formatted)
+
+(defun org-atomic-agenda--format-item-advice
     (orig-fun extra txt &rest args)
   "Advice to intercept `org-agenda-format-item' and prepend ID.
 ORIG-FUN is the original function.  EXTRA, TXT, and ARGS are the standard
@@ -237,14 +258,12 @@ arguments."
          (habit
           (when marker
             (org-atomic-core-parse-habit marker)))
-         (stack-key
+         (path
           (when marker
-            (org-atomic-core--get-stack-key marker)))
+            (org-atomic-core--resolve-stack-path marker)))
          (result (apply orig-fun extra txt args)))
     (when result
-      (let* ((has-stack
-              (and stack-key
-                   (not (string-empty-p (string-trim stack-key)))))
+      (let* ((has-stack (consp path))
              (type
               (if habit
                   (org-atomic-core-habit-type habit)
@@ -257,7 +276,7 @@ arguments."
                 (if has-stack
                     (let ((prefix-pair
                            (org-atomic-agenda--build-prefix-str
-                            stack-key type)))
+                            path type)))
                       (org-atomic-agenda--splice-prefix
                        cleaned
                        txt
@@ -309,6 +328,39 @@ This runs after `org-agenda' has finished styling the entries."
                      (not (string-prefix-p tooltip current-echo)))
                 (concat tooltip "\n---\n" current-echo)
               tooltip))))))))
+
+(defun org-atomic-agenda--filter-day-entries-advice
+    (orig-fun file date &rest args)
+  "Around advice to filter out inactive atomic habits in the agenda.
+ORIG-FUN is the original function.  FILE is the file to search, DATE is the
+date to scan, and ARGS are additional arguments."
+  (thread-last
+   (apply orig-fun file date args)
+   (seq-filter
+    (lambda (item) (org-atomic-core-active-on-date-p item date)))))
+
+(defun org-atomic-agenda--enable ()
+  "Enable all org-atomic agenda advices, sorting rules, and hooks."
+  (advice-add
+   'org-agenda-format-item
+   :around #'org-atomic-agenda--format-item-advice)
+  (advice-add
+   'org-agenda-get-day-entries
+   :around #'org-atomic-agenda--filter-day-entries-advice)
+  (add-hook
+   'org-agenda-finalize-hook #'org-atomic-agenda--finalize-faces)
+  (org-atomic-agenda--enable-sorting))
+
+(defun org-atomic-agenda--disable ()
+  "Disable all org-atomic agenda advices, sorting rules, and hooks."
+  (advice-remove
+   'org-agenda-format-item #'org-atomic-agenda--format-item-advice)
+  (advice-remove
+   'org-agenda-get-day-entries
+   #'org-atomic-agenda--filter-day-entries-advice)
+  (remove-hook
+   'org-agenda-finalize-hook #'org-atomic-agenda--finalize-faces)
+  (org-atomic-agenda--disable-sorting))
 
 (provide 'org-atomic-agenda)
 ;;; org-atomic-agenda.el ends here

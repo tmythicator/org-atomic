@@ -14,10 +14,10 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'pcase)
 (require 'subr-x)
-(require 'calendar)
-(require 'org)
 (require 'seq)
+(require 'org)
 (require 'org-atomic-util)
 
 (defgroup org-atomic-core nil
@@ -218,44 +218,48 @@ Uses CACHE (a hash table) if provided."
             (puthash cache-key time-val org-atomic-core--time-cache)
             time-val)))))
 
+
+(defun org-atomic-core-active-on-date-p
+    (item-or-marker &optional date)
+  "Return non-nil if ITEM-OR-MARKER is active on DATE (defaults to today)."
+  (let* ((marker (org-atomic-util--find-marker item-or-marker))
+         (habit (and marker (org-atomic-core-parse-habit marker)))
+         (active-days (and habit (org-atomic-core-habit-days habit))))
+    (org-atomic-util-day-active-p date active-days)))
 (defun org-atomic-core--get-effective-time (item key marker)
-  "Get the effective time of day for ITEM at MARKER with stack KEY."
+  "Get the effective time of day for ITEM at MARKER with stack KEY (or path list)."
   (or (get-text-property 0 'time-of-day item)
       (when marker
         (or (org-atomic-core--get-time-at-marker marker)
-            (when key
-              (let* ((parts (split-string key "/"))
-                     (root-id (car parts))
-                     (root-marker
-                      (org-atomic-core--find-habit-by-id root-id)))
-                (when root-marker
-                  (org-atomic-core--get-time-at-marker
-                   root-marker))))))))
+            (when-let* ((root-id
+                         (car
+                          (if (consp key)
+                              key
+                            (org-atomic-core--resolve-stack-path
+                             marker))))
+                        (root-marker
+                         (org-atomic-core--find-habit-by-id root-id)))
+              (org-atomic-core--get-time-at-marker root-marker))))))
 
-(defun org-atomic-core--resolve-stack-path (marker &optional visited)
-  "Resolve the list of ancestor ATOMIC_IDs leading up to MARKER.
-VISITED tracks seen IDs to detect cycles and prevent infinite loops."
+(defun org-atomic-core--resolve-stack-path (marker &optional acc)
+  "Resolve the linked list of ancestor ATOMIC_IDs leading up to MARKER.
+ACC accumulates the path in tail-recursive manner and prevents cycles."
   (org-atomic-util-with-heading-at-marker
    marker
    (when-let* ((id (org-entry-get (point) "ATOMIC_ID"))
                (id-trimmed (string-trim id))
-               ((not (member id-trimmed visited))))
+               ((not (member id-trimmed acc))))
      (let ((pred-marker
-            (org-atomic-core--find-predecessor-by-next-id
-             id-trimmed)))
+            (org-atomic-core--find-predecessor-by-next-id id-trimmed))
+           (new-acc (cons id-trimmed acc)))
        (if pred-marker
-           (append
-            (org-atomic-core--resolve-stack-path pred-marker
-                                                 (cons
-                                                  id-trimmed visited))
-            (list id-trimmed))
-         (list id-trimmed))))))
+           (org-atomic-core--resolve-stack-path pred-marker new-acc)
+         new-acc)))))
 
-(defun org-atomic-core--get-stack-key (marker &optional visited)
+(defun org-atomic-core--get-stack-key (marker &optional acc)
   "Get the hierarchical stack key for the habit at MARKER.
-VISITED is a list of already visited IDs to prevent infinite loops."
-  (when-let* ((path
-               (org-atomic-core--resolve-stack-path marker visited)))
+ACC is the accumulated path list."
+  (when-let* ((path (org-atomic-core--resolve-stack-path marker acc)))
     (string-join path "/")))
 
 (defun org-atomic-core-habit-bad-p (habit)
