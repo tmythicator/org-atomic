@@ -179,32 +179,6 @@ If SHOW-PERCENTAGE is non-nil, append the completion percentage."
             "")))
     (concat start-str body-str end-str pct-str)))
 
-(defun org-atomic-graph--get-non-canceled-done-dates
-    (&optional marker)
-  "Parse LOGBOOK of entry at MARKER or point.
-Return active done dates as day numbers, excluding transitions to CANCELED,
-CANCELLED or other non-DONE states."
-  (let ((resolved-marker (org-atomic-util--find-marker marker)))
-    (org-atomic-util-with-heading-at-marker
-     resolved-marker (org-narrow-to-subtree) (goto-char (point-min))
-     (let ((dates nil)
-           (excluded
-            (mapcar
-             #'upcase org-atomic-core-excluded-logbook-states)))
-       (while (re-search-forward org-atomic-util-logbook-state-regexp
-                                 nil
-                                 t)
-         (let ((state (match-string 1))
-               (ts-str (match-string 3)))
-           (when (and state
-                      ts-str
-                      (member state org-done-keywords)
-                      (not (member (upcase state) excluded)))
-             (let* ((time (org-time-string-to-time ts-str))
-                    (day (time-to-days time)))
-               (push day dates)))))
-       (nreverse dates)))))
-
 (defun org-atomic-graph--determine-day-status
     (d now-day done-p active-days is-bad-habit)
   "Pure function: determine the status symbol for day D.
@@ -235,8 +209,7 @@ If PARSED is a non-nil habit plist, use it; otherwise parse the habit."
          (habit-struct
           (or parsed (org-atomic-core-parse-habit resolved-marker)))
          (done-dates
-          (or (org-atomic-graph--get-non-canceled-done-dates
-               resolved-marker)
+          (or (org-atomic-core-get-done-dates resolved-marker)
               (org-habit-done-dates habit)))
          (start-day (org-atomic-util--time-to-day-number starting))
          (now-day (org-atomic-util--time-to-day-number current))

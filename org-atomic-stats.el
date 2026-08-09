@@ -174,8 +174,7 @@ ACC is a tuple of (current longest temp broken)."
          (why (org-atomic-core-habit-why habit))
 
          ;; Stats
-         (done-dates
-          (org-atomic-graph--get-non-canceled-done-dates marker))
+         (done-dates (org-atomic-core-get-done-dates marker))
          (today (org-today))
          (rates
           (org-atomic-stats--calculate-rates

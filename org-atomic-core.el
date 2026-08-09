@@ -218,6 +218,30 @@ Uses CACHE (a hash table) if provided."
             (puthash cache-key time-val org-atomic-core--time-cache)
             time-val)))))
 
+(defun org-atomic-core-get-done-dates (&optional marker)
+  "Parse LOGBOOK of entry at MARKER or point.
+Return active done dates as day numbers, excluding transitions to CANCELED,
+CANCELLED or other non-DONE states."
+  (let ((resolved-marker (org-atomic-util--find-marker marker)))
+    (org-atomic-util-with-heading-at-marker
+     resolved-marker (org-narrow-to-subtree) (goto-char (point-min))
+     (let ((dates nil)
+           (excluded
+            (mapcar
+             #'upcase org-atomic-core-excluded-logbook-states)))
+       (while (re-search-forward org-atomic-util-logbook-state-regexp
+                                 nil
+                                 t)
+         (let ((state (match-string 1))
+               (ts-str (match-string 3)))
+           (when (and state
+                      ts-str
+                      (member state org-done-keywords)
+                      (not (member (upcase state) excluded)))
+             (let* ((time (org-time-string-to-time ts-str))
+                    (day (time-to-days time)))
+               (push day dates)))))
+       (nreverse dates)))))
 
 (defun org-atomic-core-active-on-date-p
     (item-or-marker &optional date)
@@ -226,6 +250,7 @@ Uses CACHE (a hash table) if provided."
          (habit (and marker (org-atomic-core-parse-habit marker)))
          (active-days (and habit (org-atomic-core-habit-days habit))))
     (org-atomic-util-day-active-p date active-days)))
+
 (defun org-atomic-core--get-effective-time (item key marker)
   "Get the effective time of day for ITEM at MARKER with stack KEY (or path list)."
   (or (get-text-property 0 'time-of-day item)
